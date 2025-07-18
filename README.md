@@ -21,8 +21,6 @@ Offrir une reconnaissance (virtuelle ou IRL) des efforts
 
 🔁 Évolutions visuelles au bout de plusieurs jours de streak
 
-🎮 Duels en temps réel (optionnel) : 1v1 en direct avec 5 questions rapides
-
 🏆 Récompenses symboliques pour les meilleurs (badges, stickers...)
 
 🔹 Cas d’usage hackathon
