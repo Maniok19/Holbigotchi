@@ -7,18 +7,23 @@ class User(BaseModel):
     __tablename__ = 'users'
     
     email = db.Column(db.String(120), nullable=False, unique=True)
+    username = db.Column(db.String(50), nullable=False, unique=True)
     password_hash = db.Column(db.String(128), nullable=False)
     cohort = db.Column(db.String(50), nullable=False)
     
     # Relation avec la cohorte (many-to-one)
     cohort_id = db.Column(db.Integer, db.ForeignKey('cohorts.id'), nullable=True)
     
-    def __init__(self, email, password, cohort, cohort_id=None):
+    def __init__(self, email, username, password, cohort, cohort_id=None):
         """Initialise un nouvel utilisateur"""
         if not self.validate_email(email):
             raise ValueError("L'email doit se terminer par @holbertonstudents.com")
         
+        if not self.validate_username(username):
+            raise ValueError("Le nom d'utilisateur doit contenir entre 3 et 50 caractères et ne peut contenir que des lettres, chiffres et underscores")
+        
         self.email = email
+        self.username = username
         self.set_password(password)
         self.cohort = cohort
         self.cohort_id = cohort_id
@@ -29,6 +34,16 @@ class User(BaseModel):
         if not email or not isinstance(email, str):
             return False
         return email.endswith('@holbertonstudents.com')
+    
+    @staticmethod
+    def validate_username(username):
+        """Valide le nom d'utilisateur (3-50 caractères, lettres, chiffres, underscores)"""
+        if not username or not isinstance(username, str):
+            return False
+        if len(username) < 3 or len(username) > 50:
+            return False
+        # Permet seulement lettres, chiffres et underscores
+        return re.match(r'^[a-zA-Z0-9_]+$', username) is not None
     
     def set_password(self, password):
         """Hache et stocke le mot de passe"""
@@ -43,6 +58,7 @@ class User(BaseModel):
         return {
             'id': self.id,
             'email': self.email,
+            'username': self.username,
             'cohort': self.cohort,
             'cohort_id': self.cohort_id,
             'created_at': self.created_at.isoformat(),
@@ -50,4 +66,4 @@ class User(BaseModel):
         }
     
     def __repr__(self):
-        return f'<User {self.email}>'
+        return f'<User {self.username} ({self.email})>'

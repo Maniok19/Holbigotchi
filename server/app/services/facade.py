@@ -8,14 +8,17 @@ class UserFacade:
     def __init__(self):
         self.repository = SQLAlchemyRepository(User)
 
-    def create_user(self, email, password, cohort):
-        user = User(email=email, password=password, cohort=cohort)
+    def create_user(self, email, username, password, cohort):
+        user = User(email=email, username=username, password=password, cohort=cohort)
         db.session.add(user)
         db.session.commit()
         return user
 
     def get_user_by_email(self, email):
         return self.repository.get_by_attribute('email', email)
+
+    def get_user_by_username(self, username):
+        return self.repository.get_by_attribute('username', username)
 
     def get_user(self, user_id):
         return self.repository.get(user_id)

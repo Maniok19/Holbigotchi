@@ -8,8 +8,7 @@ from app import db
 cohorts_bp = Blueprint('cohorts', __name__)
 
 @cohorts_bp.route('/', methods=['GET'])
-@jwt_required()
-def get_all_cohorts():
+def get_all_cohorts():  # Supprimé @jwt_required() pour permettre l'accès public
     """Récupère toutes les cohortes"""
     try:
         cohorts = Cohort.query.all()

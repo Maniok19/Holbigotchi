@@ -90,26 +90,31 @@ def populate_test_users():
     test_users = [
         {
             'email': 'alice@holbertonstudents.com',
+            'username': 'alice_c20',
             'password': 'password123',
             'cohort': 'C20'
         },
         {
             'email': 'bob@holbertonstudents.com',
+            'username': 'bob_c21',
             'password': 'password123',
             'cohort': 'C21'
         },
         {
             'email': 'charlie@holbertonstudents.com',
+            'username': 'charlie_c22',
             'password': 'password123',
             'cohort': 'C22'
         },
         {
             'email': 'diana@holbertonstudents.com',
+            'username': 'diana_c23',
             'password': 'password123',
             'cohort': 'C23'
         },
         {
             'email': 'eve@holbertonstudents.com',
+            'username': 'eve_c24',
             'password': 'password123',
             'cohort': 'C24'
         }
@@ -128,6 +133,7 @@ def populate_test_users():
             try:
                 user = User(
                     email=user_data['email'],
+                    username=user_data['username'],
                     password=user_data['password'],
                     cohort=user_data['cohort'],
                     cohort_id=cohort.id if cohort else None
@@ -136,7 +142,7 @@ def populate_test_users():
                 db.session.add(user)
                 db.session.commit()
                 
-                print(f"✓ Utilisateur {user_data['email']} créé avec succès")
+                print(f"✓ Utilisateur {user_data['email']} (@{user_data['username']}) créé avec succès")
                 
             except Exception as e:
                 print(f"✗ Erreur lors de la création de l'utilisateur {user_data['email']}: {e}")
@@ -174,7 +180,7 @@ def show_database_stats():
             print("\n👥 UTILISATEURS DE TEST:")
             users = User.query.all()
             for user in users:
-                print(f"  • {user.email} (Cohorte: {user.cohort})")
+                print(f"  • {user.email} (@{user.username}) - Cohorte: {user.cohort}")
         
     except Exception as e:
         print(f"❌ Erreur lors de la récupération des statistiques: {e}")
