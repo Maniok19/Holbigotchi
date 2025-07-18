@@ -9,37 +9,44 @@ from app.models.holbigotchi import Holbigotchi
 from app.models.user import User
 
 def populate_cohorts():
-    """Crée des cohortes de test"""
+    """Crée des cohortes de test avec des Holbigotchi ayant des assets variés"""
     
-    # Cohortes par défaut
+    # Cohortes par défaut avec assets spécifiques
     cohorts_data = [
         {
             'name': 'C20',
-            'description': 'Cohorte 20 - Holberton School'
+            'description': 'Cohorte 20 - Holberton School',
+            'holbigotchi_asset': 'Guecko'
         },
         {
             'name': 'C21',
-            'description': 'Cohorte 21 - Holberton School'
+            'description': 'Cohorte 21 - Holberton School',
+            'holbigotchi_asset': 'Monkey'
         },
         {
             'name': 'C22',
-            'description': 'Cohorte 22 - Holberton School'
+            'description': 'Cohorte 22 - Holberton School',
+            'holbigotchi_asset': 'moskrat'
         },
         {
             'name': 'C23',
-            'description': 'Cohorte 23 - Holberton School'
+            'description': 'Cohorte 23 - Holberton School',
+            'holbigotchi_asset': 'dog_bowl'
         },
         {
             'name': 'C24',
-            'description': 'Cohorte 24 - Holberton School'
+            'description': 'Cohorte 24 - Holberton School',
+            'holbigotchi_asset': None  # Asset aléatoire
         },
         {
             'name': 'C25',
-            'description': 'Cohorte 25 - Holberton School'
+            'description': 'Cohorte 25 - Holberton School',
+            'holbigotchi_asset': None  # Asset aléatoire
         },
         {
             'name': 'C26',
-            'description': 'Cohorte 26 - Holberton School'
+            'description': 'Cohorte 26 - Holberton School',
+            'holbigotchi_asset': None  # Asset aléatoire
         }
     ]
     
@@ -51,6 +58,27 @@ def populate_cohorts():
         
         if existing_cohort:
             print(f"✓ Cohorte {cohort_data['name']} existe déjà")
+            
+            # Vérifier si le Holbigotchi existe et mettre à jour son asset si nécessaire
+            if existing_cohort.holbigotchi:
+                holbi = existing_cohort.holbigotchi
+                if cohort_data['holbigotchi_asset'] and holbi.asset_folder != cohort_data['holbigotchi_asset']:
+                    old_asset = holbi.asset_folder
+                    holbi.asset_folder = cohort_data['holbigotchi_asset']
+                    db.session.commit()
+                    print(f"  → Asset mis à jour: {old_asset} → {holbi.asset_folder}")
+                else:
+                    print(f"  → Holbigotchi avec asset: {holbi.asset_folder}")
+            else:
+                # Créer un Holbigotchi manquant
+                holbigotchi = Holbigotchi(
+                    cohort_id=existing_cohort.id,
+                    asset_folder=cohort_data['holbigotchi_asset']
+                )
+                db.session.add(holbigotchi)
+                db.session.commit()
+                print(f"  → Holbigotchi créé avec asset: {holbigotchi.asset_folder}")
+            
             created_cohorts.append(existing_cohort)
         else:
             # Créer la cohorte
@@ -64,11 +92,15 @@ def populate_cohorts():
                 db.session.commit()
                 
                 # Créer automatiquement un Holbigotchi pour cette cohorte
-                holbigotchi = Holbigotchi(cohort_id=cohort.id)
+                holbigotchi = Holbigotchi(
+                    cohort_id=cohort.id,
+                    asset_folder=cohort_data['holbigotchi_asset']
+                )
                 db.session.add(holbigotchi)
                 db.session.commit()
                 
-                print(f"✓ Cohorte {cohort_data['name']} créée avec succès (ID: {cohort.id})")
+                asset_info = holbigotchi.asset_folder
+                print(f"✓ Cohorte {cohort_data['name']} créée (ID: {cohort.id}) avec Holbigotchi {asset_info}")
                 created_cohorts.append(cohort)
                 
             except Exception as e:
@@ -168,12 +200,18 @@ def show_database_stats():
             print("\n📚 COHORTES DISPONIBLES:")
             cohorts = Cohort.query.all()
             for cohort in cohorts:
-                holbi_hp = cohort.holbigotchi.health_points if cohort.holbigotchi else 'N/A'
-                holbi_state = cohort.holbigotchi.evolution_state if cohort.holbigotchi else 'N/A'
-                user_count_in_cohort = User.query.filter_by(cohort_id=cohort.id).count()
-                print(f"  • {cohort.name} - {cohort.description}")
-                print(f"    Holbigotchi: {holbi_hp} HP, État: {holbi_state}")
-                print(f"    Utilisateurs: {user_count_in_cohort}")
+                if cohort.holbigotchi:
+                    holbi_hp = cohort.holbigotchi.health_points
+                    holbi_state = cohort.holbigotchi.evolution_state
+                    holbi_asset = cohort.holbigotchi.asset_folder
+                    user_count_in_cohort = User.query.filter_by(cohort_id=cohort.id).count()
+                    
+                    print(f"  • {cohort.name} - {cohort.description}")
+                    print(f"    Holbigotchi: {holbi_hp} HP, État: {holbi_state}, Asset: {holbi_asset}")
+                    print(f"    Utilisateurs: {user_count_in_cohort}")
+                else:
+                    print(f"  • {cohort.name} - {cohort.description}")
+                    print(f"    ⚠️  Aucun Holbigotchi associé")
         
         # Afficher les utilisateurs
         if user_count > 0:
@@ -181,6 +219,26 @@ def show_database_stats():
             users = User.query.all()
             for user in users:
                 print(f"  • {user.email} (@{user.username}) - Cohorte: {user.cohort}")
+        
+        # Afficher les assets utilisés
+        print("\n🎨 ASSETS HOLBIGOTCHI:")
+        holbigotchis = Holbigotchi.query.all()
+        asset_usage = {}
+        for holbi in holbigotchis:
+            asset = holbi.asset_folder
+            if asset in asset_usage:
+                asset_usage[asset] += 1
+            else:
+                asset_usage[asset] = 1
+        
+        for asset, count in asset_usage.items():
+            print(f"  • {asset}: {count} Holbigotchi")
+        
+        # Afficher les assets disponibles
+        print("\n🎯 ASSETS DISPONIBLES:")
+        available_assets = Holbigotchi.get_available_assets()
+        for asset in available_assets:
+            print(f"  • {asset}")
         
     except Exception as e:
         print(f"❌ Erreur lors de la récupération des statistiques: {e}")
@@ -249,10 +307,13 @@ def main():
             print("1. Démarrer le serveur: python run.py")
             print("2. Tester l'inscription avec une cohorte existante")
             print("3. Utiliser les utilisateurs de test pour vous connecter")
+            print("4. Tester l'API pour changer les assets: /api/holbigotchi/<id>/change-asset")
+            
             print("\nCohortes disponibles pour l'inscription:")
             cohorts = Cohort.query.all()
             for cohort in cohorts:
-                print(f"  - {cohort.name}: {cohort.description}")
+                asset_info = cohort.holbigotchi.asset_folder if cohort.holbigotchi else "Aucun"
+                print(f"  - {cohort.name}: {cohort.description} (Asset: {asset_info})")
             
         except Exception as e:
             print(f"❌ Erreur lors de l'initialisation: {e}")

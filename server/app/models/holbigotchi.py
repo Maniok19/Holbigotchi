@@ -1,3 +1,4 @@
+import random
 from app.models.base import BaseModel
 from app import db
 from datetime import datetime
@@ -15,18 +16,81 @@ class Holbigotchi(BaseModel):
     last_feed_at = db.Column(db.DateTime, nullable=True)
     evolution_state = db.Column(db.String(20), nullable=False, default='egg')
     
+    # Asset 3D associé au Holbigotchi
+    asset_folder = db.Column(db.String(100), nullable=False, default='Guecko')
+    
+    # Liste des assets disponibles
+    AVAILABLE_ASSETS = {
+        'Guecko': {
+            'model_gltf': 'Gecko.gltf',
+            'model_bin': 'Gecko.bin',
+            'texture': 'T_Gecko.png'
+        },
+        'Monkey': {
+            'model_gltf': 'Colobus.gltf',
+            'model_bin': 'Colobus.bin',
+            'texture': 'T_Colobus.png'
+        },
+        'moskrat': {
+            'model_gltf': 'Muskrat.gltf',
+            'model_bin': 'Muskrat.bin',
+            'texture': 'T_Muskrat.png'
+        },
+        'dog_bowl': {
+            'model_gltf': 'DogBowlFBX.gltf',
+            'model_bin': 'DogBowlFBX.bin',
+            'texture': 'DogBowl01_DogBowl01_BaseColor.jpg'
+        }
+    }
+    
     # Contraintes pour health_points (0-100)
     __table_args__ = (
         db.CheckConstraint('health_points >= 0 AND health_points <= 100', 
                          name='check_health_points_range'),
     )
     
-    def __init__(self, cohort_id, health_points=70, evolution_state='egg'):
+    def __init__(self, cohort_id, health_points=70, evolution_state='egg', asset_folder=None):
         """Initialise un nouveau Holbigotchi"""
         self.cohort_id = cohort_id
-        self.health_points = max(0, min(100, health_points))  # Assure que la valeur est entre 0 et 100
+        self.health_points = max(0, min(100, health_points))
         self.evolution_state = evolution_state
+        
+        # Assigner un asset aléatoire si aucun n'est spécifié
+        if asset_folder is None:
+            asset_folder = self.assign_random_asset()
+        
+        self.asset_folder = asset_folder
         self.last_feed_at = None
+    
+    @classmethod
+    def assign_random_asset(cls):
+        """Assigne un asset aléatoire parmi ceux disponibles"""
+        return random.choice(list(cls.AVAILABLE_ASSETS.keys()))
+    
+    @classmethod
+    def get_available_assets(cls):
+        """Retourne la liste des assets disponibles"""
+        return list(cls.AVAILABLE_ASSETS.keys())
+    
+    def get_asset_paths(self):
+        """
+        Retourne les chemins vers les assets 3D du Holbigotchi
+        
+        Returns:
+            dict: Dictionnaire avec les chemins vers les différents assets
+        """
+        if self.asset_folder not in self.AVAILABLE_ASSETS:
+            # Asset par défaut si l'asset n'existe pas
+            self.asset_folder = 'Guecko'
+        
+        asset_config = self.AVAILABLE_ASSETS[self.asset_folder]
+        base_path = f"/assets/{self.asset_folder}"
+        
+        return {
+            'model_gltf': f"{base_path}/{asset_config['model_gltf']}",
+            'model_bin': f"{base_path}/{asset_config['model_bin']}",
+            'texture': f"{base_path}/{asset_config['texture']}"
+        }
     
     def get_status(self):
         """
@@ -121,9 +185,12 @@ class Holbigotchi(BaseModel):
             'status': self.get_status(),
             'days_since_last_feed': self.days_since_last_feed(),
             'can_evolve': self.can_evolve(),
+            'asset_folder': self.asset_folder,
+            'asset_paths': self.get_asset_paths(),
+            'available_assets': self.get_available_assets(),
             'created_at': self.created_at.isoformat(),
             'updated_at': self.updated_at.isoformat()
         }
     
     def __repr__(self):
-        return f'<Holbigotchi {self.evolution_state} - HP: {self.health_points}>'
+        return f'<Holbigotchi {self.evolution_state} - HP: {self.health_points} - Asset: {self.asset_folder}>'

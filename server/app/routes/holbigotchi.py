@@ -265,3 +265,66 @@ def get_global_stats():
             'success': False,
             'message': 'Erreur lors de la récupération des statistiques'
         }), 500
+
+@holbigotchi_bp.route('/<int:holbigotchi_id>/change-asset', methods=['PUT'])
+@jwt_required()
+def change_holbigotchi_asset(holbigotchi_id):
+    """Change l'asset d'un Holbigotchi"""
+    try:
+        holbigotchi = Holbigotchi.query.get(holbigotchi_id)
+        if not holbigotchi:
+            return jsonify({
+                'success': False,
+                'message': 'Holbigotchi non trouvé'
+            }), 404
+        
+        data = request.get_json()
+        if not data or 'asset_folder' not in data:
+            return jsonify({
+                'success': False,
+                'message': 'Asset folder requis',
+                'available_assets': Holbigotchi.get_available_assets()
+            }), 400
+        
+        new_asset = data['asset_folder']
+        
+        # Vérifier que l'asset existe
+        if new_asset not in Holbigotchi.get_available_assets():
+            return jsonify({
+                'success': False,
+                'message': f'Asset "{new_asset}" non disponible',
+                'available_assets': Holbigotchi.get_available_assets()
+            }), 400
+        
+        # Changer l'asset
+        old_asset = holbigotchi.asset_folder
+        holbigotchi.asset_folder = new_asset
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Asset changé de "{old_asset}" vers "{new_asset}"',
+            'holbigotchi': holbigotchi.to_dict()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Erreur lors du changement d\'asset'
+        }), 500
+
+@holbigotchi_bp.route('/assets', methods=['GET'])
+@jwt_required()
+def get_available_assets():
+    """Récupère la liste des assets disponibles"""
+    try:
+        return jsonify({
+            'success': True,
+            'assets': Holbigotchi.get_available_assets(),
+            'asset_details': Holbigotchi.AVAILABLE_ASSETS
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Erreur lors de la récupération des assets'
+        }), 500
