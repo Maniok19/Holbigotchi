@@ -1,0 +1,204 @@
+{
+  "asset": {
+    "generator": "UnityGltf 2.17.3, Unity 6000.0.38f1, Built-in RP",
+    "version": "2.0"
+  },
+  "extensionsUsed": [
+    "KHR_texture_transform"
+  ],
+  "scene": 0,
+  "scenes": [
+    {
+      "nodes": [
+        0
+      ],
+      "name": "DogBowlFBX"
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 3409,
+      "type": "VEC3",
+      "max": [
+        0.01171537023037672,
+        0.01171537023037672,
+        0.0066987392492592335
+      ],
+      "min": [
+        -0.01171537023037672,
+        -0.011715369299054146,
+        0.0016668321331962943
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5126,
+      "count": 3409,
+      "type": "VEC3",
+      "max": [
+        0.99520277976989746,
+        0.99520421028137207,
+        0.9999464750289917
+      ],
+      "min": [
+        -0.99520277976989746,
+        -0.9952017068862915,
+        -1.0
+      ]
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 3409,
+      "type": "VEC4",
+      "max": [
+        0.99827992916107178,
+        0.99827873706817627,
+        0.995202898979187,
+        1.0
+      ],
+      "min": [
+        -0.99827992916107178,
+        -0.99827945232391357,
+        -0.92534369230270386,
+        1.0
+      ]
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5126,
+      "count": 3409,
+      "type": "VEC2",
+      "max": [
+        0.71175873279571533,
+        0.99367350339889526
+      ],
+      "min": [
+        0.0032732151448726654,
+        0.0026963353157043457
+      ]
+    },
+    {
+      "bufferView": 4,
+      "componentType": 5123,
+      "count": 17658,
+      "type": "SCALAR",
+      "max": [
+        3408.0
+      ],
+      "min": [
+        0.0
+      ]
+    }
+  ],
+  "buffers": [
+    {
+      "uri": "DogBowlFBX.bin",
+      "byteLength": 198948
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteLength": 40908,
+      "byteStride": 12,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 40908,
+      "byteLength": 40908,
+      "byteStride": 12,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 81816,
+      "byteLength": 54544,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 136360,
+      "byteLength": 27272,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 163632,
+      "byteLength": 35316,
+      "target": 34963
+    }
+  ],
+  "images": [
+    {
+      "uri": "DogBowl01_DogBowl01_BaseColor.jpg",
+      "name": "DogBowl01_DogBowl01_BaseColor"
+    }
+  ],
+  "materials": [
+    {
+      "pbrMetallicRoughness": {
+        "baseColorTexture": {
+          "index": 0,
+          "extensions": {
+            "KHR_texture_transform": {
+              "texCoord": 0
+            }
+          }
+        },
+        "metallicFactor": 0.0,
+        "roughnessFactor": 0.5
+      },
+      "name": "DogBowl01"
+    }
+  ],
+  "meshes": [
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "NORMAL": 1,
+            "TANGENT": 2,
+            "TEXCOORD_0": 3
+          },
+          "indices": 4,
+          "material": 0
+        }
+      ],
+      "name": "DogBowlFBX"
+    }
+  ],
+  "nodes": [
+    {
+      "mesh": 0,
+      "rotation": [
+        -0.7071068,
+        0.0,
+        0.0,
+        0.7071067
+      ],
+      "scale": [
+        50.0,
+        49.9999924,
+        49.9999924
+      ],
+      "name": "DogBowlFBX"
+    }
+  ],
+  "samplers": [
+    {
+      "minFilter": 9987
+    }
+  ],
+  "textures": [
+    {
+      "sampler": 0,
+      "source": 0,
+      "name": "DogBowl01_DogBowl01_BaseColor"
+    }
+  ]
+}

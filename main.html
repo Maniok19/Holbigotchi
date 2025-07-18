@@ -59,19 +59,6 @@
         #animationList li.active {
             background: rgba(0, 150, 255, 0.5);
         }
-        #feedButton {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px 15px;
-            border-radius: 5px;
-            cursor: pointer;
-            margin-top: 10px;
-            font-size: 14px;
-        }
-        #feedButton:hover {
-            background: #45a049;
-        }
         #questionModal {
             position: fixed;
             top: 20px;
@@ -133,7 +120,6 @@
             <ul id="animationList"></ul>
             <button id="playPause">Play</button>
             <button id="stop">Stop</button>
-            <button id="feedButton">Feed</button>
         </div>
     </div>
 
@@ -191,6 +177,7 @@
         let currentAction = null;
         const clock = new THREE.Clock();
         let model; // Store reference to the model
+        let dogBowl; // Add reference to the dog bowl
         const mouse = new THREE.Vector2();
         const raycaster = new THREE.Raycaster();
         let lastPosition = new THREE.Vector3(); // Track previous position
@@ -216,9 +203,144 @@
         let isFeedingActive = false; // Add this flag
         let isManualAnimationActive = false; // Flag to prevent auto-animations from overriding manual ones
 
+        // Load the dog bowl GLTF model
+        function loadDogBowl() {
+            const bowlLoader = new GLTFLoader();
+            bowlLoader.load('./dog_bowl/DogBowlFBX.gltf', (gltf) => {
+                dogBowl = gltf.scene;
+                
+                // Position the bowl in the center of the scene
+                dogBowl.position.set(0, 0, 0);
+                dogBowl.name = 'dogBowl'; // Name it for raycasting
+                
+                // Scale the bowl if needed (adjust as necessary)
+                dogBowl.scale.set(1, 1, 1);
+                
+                // Enable shadows
+                dogBowl.traverse((child) => {
+                    if (child.isMesh) {
+                        child.castShadow = true;
+                        child.receiveShadow = true;
+                    }
+                });
+                
+                scene.add(dogBowl);
+                console.log('Dog bowl loaded successfully');
+            }, (progress) => {
+                console.log('Dog bowl loading progress:', progress);
+            }, (error) => {
+                console.error('Error loading dog bowl GLTF model:', error);
+                // Fallback: create a simple bowl if the model fails to load
+                createFallbackDogBowl();
+            });
+        }
+
+        // Fallback function to create a simple bowl if GLTF loading fails
+        function createFallbackDogBowl() {
+            const bowlGroup = new THREE.Group();
+            
+            // Bowl base (cylinder)
+            const bowlGeometry = new THREE.CylinderGeometry(0.3, 0.2, 0.1, 16);
+            const bowlMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Brown color
+            const bowl = new THREE.Mesh(bowlGeometry, bowlMaterial);
+            bowl.position.y = 0.05;
+            bowl.castShadow = true;
+            bowl.receiveShadow = true;
+            bowlGroup.add(bowl);
+            
+            // Bowl inner (slightly smaller cylinder for the inside)
+            const innerGeometry = new THREE.CylinderGeometry(0.25, 0.18, 0.08, 16);
+            const innerMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 }); // Darker brown
+            const inner = new THREE.Mesh(innerGeometry, innerMaterial);
+            inner.position.y = 0.09;
+            bowlGroup.add(inner);
+            
+            // Food in the bowl (small sphere)
+            const foodGeometry = new THREE.SphereGeometry(0.15, 8, 6);
+            const foodMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Brown food
+            const food = new THREE.Mesh(foodGeometry, foodMaterial);
+            food.position.y = 0.12;
+            food.scale.y = 0.3; // Flatten it a bit
+            bowlGroup.add(food);
+            
+            // Position the bowl in the center of the scene
+            bowlGroup.position.set(0, 0, 0);
+            bowlGroup.name = 'dogBowl'; // Name it for raycasting
+            
+            dogBowl = bowlGroup;
+            scene.add(dogBowl);
+            console.log('Fallback dog bowl created');
+        }
+
+        // Load the dog bowl
+        loadDogBowl();
+
+        // Function to show feeding question
+        function showFeedingQuestion() {
+            if (feedingQuestions.length === 0) return;
+            
+            isQuestionActive = true;
+            isFeedingActive = true;
+            
+            // Select a random question
+            currentQuestion = feedingQuestions[Math.floor(Math.random() * feedingQuestions.length)];
+            
+            // Update modal content
+            document.getElementById('questionText').textContent = currentQuestion.question;
+            
+            // Clear previous buttons
+            const answerButtons = document.getElementById('answerButtons');
+            answerButtons.innerHTML = '';
+            
+            // Create answer buttons
+            currentQuestion.answers.forEach((answer, index) => {
+                const button = document.createElement('button');
+                button.textContent = answer;
+                button.className = 'answer-button';
+                button.onclick = () => checkAnswer(index);
+                answerButtons.appendChild(button);
+            });
+            
+            // Clear feedback and hide close button
+            document.getElementById('feedbackMessage').innerHTML = '';
+            document.getElementById('closeModal').style.display = 'none';
+            
+            // Show modal
+            document.getElementById('questionModal').style.display = 'flex';
+        }
+
+        // Function to check answer
+        function checkAnswer(selectedIndex) {
+            const feedbackElement = document.getElementById('feedbackMessage');
+            const closeButton = document.getElementById('closeModal');
+            
+            if (selectedIndex === currentQuestion.correct) {
+                feedbackElement.innerHTML = '<span class="correct">Correct! Your muskrat is happy!</span>';
+                // Play eating animation if available
+                if (actions['Eat'] || actions['Eating']) {
+                    const eatAction = actions['Eat'] || actions['Eating'];
+                    playAnimationAuto(eatAction.getClip().name);
+                }
+            } else {
+                feedbackElement.innerHTML = '<span class="incorrect">Wrong answer. Try again next time!</span>';
+            }
+            
+            // Disable answer buttons
+            const buttons = document.querySelectorAll('.answer-button');
+            buttons.forEach(button => button.disabled = true);
+            
+            // Show close button
+            closeButton.style.display = 'inline-block';
+            closeButton.onclick = () => {
+                document.getElementById('questionModal').style.display = 'none';
+                isQuestionActive = false;
+                isFeedingActive = false;
+            };
+        }
+
         // Load the GLTF model
         const loader = new GLTFLoader();
-        loader.load('./Monkey/Colobus.gltf', (gltf) => {
+        loader.load('./moskrat/Muskrat.gltf', (gltf) => {
             model = gltf.scene; // Store the model reference
             scene.add(model);
 
@@ -326,6 +448,23 @@
                         targetRotation = angle;
                     }
                 }
+            }
+        }
+
+        // Add click event listener for the dog bowl
+        function onMouseClick(event) {
+            // Convert mouse position to normalized device coordinates
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+            
+            // Create raycaster from camera through mouse position
+            raycaster.setFromCamera(mouse, camera);
+            
+            // Check if we clicked on the dog bowl
+            const intersects = raycaster.intersectObject(dogBowl, true);
+            
+            if (intersects.length > 0 && !isQuestionActive) {
+                showFeedingQuestion();
             }
         }
 
@@ -471,105 +610,16 @@
 
         // Add mouse event listener
         window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('click', onMouseClick); // Add click listener
 
-        // Feed button functionality
+        // Remove the feed button functionality since we're using the bowl now
+        /* 
         document.getElementById('feedButton').addEventListener('click', () => {
             if (!isQuestionActive) {
                 showFeedingQuestion();
             }
         });
-
-        function showFeedingQuestion() {
-            // Select a random question
-            currentQuestion = feedingQuestions[Math.floor(Math.random() * feedingQuestions.length)];
-            isQuestionActive = true;
-            
-            // Update modal content
-            document.getElementById('questionText').textContent = currentQuestion.question;
-            
-            const answerButtons = document.getElementById('answerButtons');
-            answerButtons.innerHTML = '';
-            
-            currentQuestion.answers.forEach((answer, index) => {
-                const button = document.createElement('button');
-                button.className = 'answer-button';
-                button.textContent = answer;
-                button.addEventListener('click', () => checkAnswer(index));
-                answerButtons.appendChild(button);
-            });
-            
-            // Clear previous feedback
-            document.getElementById('feedbackMessage').innerHTML = '';
-            document.getElementById('closeModal').style.display = 'none';
-            
-            // Show modal
-            document.getElementById('questionModal').style.display = 'flex';
-        }
-
-        function checkAnswer(selectedIndex) {
-            const feedbackMessage = document.getElementById('feedbackMessage');
-            const answerButtons = document.querySelectorAll('.answer-button');
-            
-            // Disable all buttons
-            answerButtons.forEach(button => button.disabled = true);
-            
-            if (selectedIndex === currentQuestion.correct) {
-                feedbackMessage.innerHTML = '🎉 Correct! Your muskrat is well fed and happy!';
-                feedbackMessage.className = 'correct';
-                
-                // Play Eat animation for 5 seconds if available
-                if (actions['Eat']) {
-                    isFeedingActive = true; // Set flag to prevent interruption
-                    if (currentAction) {
-                        currentAction.fadeOut(0.3);
-                    }
-                    currentAction = actions['Eat'];
-                    actions['Eat'].reset().fadeIn(0.3).play();
-                    
-                    // Stop the Eat animation after 5 seconds and return to Idle
-                    setTimeout(() => {
-                        if (currentAction === actions['Eat']) {
-                            actions['Eat'].fadeOut(0.3);
-                            if (actions['Idle_A']) {
-                                currentAction = actions['Idle_A'];
-                                actions['Idle_A'].reset().fadeIn(0.3).play();
-                            }
-                        }
-                        isFeedingActive = false; // Reset flag after feeding is done
-                    }, 5000);
-                } else if (actions['Happy'] || actions['Idle_A']) {
-                    // Fallback if Eat animation doesn't exist
-                    const feedAnimation = actions['Happy'] || actions['Idle_A'];
-                    if (currentAction) {
-                        currentAction.fadeOut(0.3);
-                    }
-                    currentAction = feedAnimation;
-                    feedAnimation.reset().fadeIn(0.3).play();
-                }
-            } else {
-                feedbackMessage.innerHTML = `❌ Incorrect! The correct answer was: "${currentQuestion.answers[currentQuestion.correct]}"<br>Your muskrat is still hungry...`;
-                feedbackMessage.className = 'incorrect';
-            }
-            
-            // Show close button
-            document.getElementById('closeModal').style.display = 'block';
-        }
-
-        // Close modal functionality
-        document.getElementById('closeModal').addEventListener('click', () => {
-            document.getElementById('questionModal').style.display = 'none';
-            isQuestionActive = false;
-            currentQuestion = null;
-        });
-
-        // Close modal when clicking outside (removed since modal is now smaller)
-        document.getElementById('questionModal').addEventListener('click', (e) => {
-            if (e.target === document.getElementById('questionModal')) {
-                document.getElementById('questionModal').style.display = 'none';
-                isQuestionActive = false;
-                currentQuestion = null;
-            }
-        });
+        */
 
         animate();
     </script>
