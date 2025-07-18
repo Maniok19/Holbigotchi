@@ -231,14 +231,19 @@
         let dogBowl; // Add reference to the dog bowl
         const mouse = new THREE.Vector2();
         const raycaster = new THREE.Raycaster();
-        let lastPosition = new THREE.Vector3(); // Track previous position
-        let isMoving = false;
-        const maxSpeed = 0.02; // Maximum movement speed per frame
-        const maxRotationSpeed = 0.05; // Maximum rotation speed per frame (radians)
-        let targetRotation = 0; // Target Y rotation for smooth turning
+        // Remove mouse tracking variables
         let idleStartTime = 0; // Track when idle state started
         const idleFaceDelay = 3000; // 3 seconds delay before facing screen
         let shouldFaceScreen = false;
+
+        // Add random movement variables
+        let isMoving = false;
+        let moveTarget = new THREE.Vector3();
+        let moveSpeed = 0.005;
+        let nextMoveTime = 0;
+        let moveDuration = 0;
+        let moveStartTime = 0;
+        const moveRadius = 3; // How far the creature can wander from center
 
         // Quiz questions for feeding
         const feedingQuestions = [
@@ -261,7 +266,7 @@
                 dogBowl = gltf.scene;
                 
                 // Position the bowl in the center of the scene
-                dogBowl.position.set(0, 0, 0);
+                dogBowl.position.set(0, -0.5, 0);
                 dogBowl.name = 'dogBowl'; // Name it for raycasting
                 
                 // Scale the bowl if needed (adjust as necessary)
@@ -391,7 +396,7 @@
 
         // Load the GLTF model
         const loader = new GLTFLoader();
-        loader.load('./moskrat/Muskrat.gltf', (gltf) => {
+        loader.load('./Guecko/Gecko.gltf', (gltf) => {
             model = gltf.scene; // Store the model reference
             scene.add(model);
 
@@ -455,58 +460,7 @@
             console.error('Error loading GLTF model:', error);
         });
 
-        // Mouse movement tracking
-        let lastMouseMoveTime = 0;
-        let mouseMoving = false;
-        const mouseStopDelay = 100; // milliseconds to wait before considering mouse stopped
-
-        function onMouseMove(event) {
-            // Convert mouse position to normalized device coordinates (-1 to +1)
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            
-            // Update mouse movement tracking
-            lastMouseMoveTime = Date.now();
-            mouseMoving = true;
-            
-            if (model) {
-                // Create a ray from camera through mouse position
-                raycaster.setFromCamera(mouse, camera);
-                
-                // Create a plane at ground level (y = 0) to intersect with
-                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-                const intersectionPoint = new THREE.Vector3();
-                
-                // Get intersection point with ground plane
-                raycaster.ray.intersectPlane(groundPlane, intersectionPoint);
-                
-                if (intersectionPoint) {
-                    // Calculate movement vector
-                    const targetPosition = new THREE.Vector3(intersectionPoint.x, 0, intersectionPoint.z);
-                    const movementVector = targetPosition.clone().sub(model.position);
-                    
-                    // Only move if there's a significant distance to the target
-                    if (movementVector.length() > 0.05) {
-                        // Limit movement speed
-                        if (movementVector.length() > maxSpeed) {
-                            movementVector.normalize().multiplyScalar(maxSpeed);
-                        }
-                        
-                        // Store previous position
-                        lastPosition.copy(model.position);
-                        
-                        // Apply movement
-                        model.position.add(movementVector);
-                        
-                        // Calculate target rotation based on movement direction
-                        const angle = Math.atan2(movementVector.x, movementVector.z);
-                        targetRotation = angle;
-                    }
-                }
-            }
-        }
-
-        // Add click event listener for the dog bowl
+        // Add click event listener for the dog bowl only
         function onMouseClick(event) {
             // Convert mouse position to normalized device coordinates
             mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -523,58 +477,133 @@
             }
         }
 
-        // Check mouse movement status in render loop
+        // Remove updateAnimationState function - replace with enhanced version with movement
         function updateAnimationState() {
             // Don't change animations if feeding is active or manual animation is playing
             if (isFeedingActive || isManualAnimationActive) {
                 return;
             }
             
-            // Check if mouse has stopped moving
-            if (Date.now() - lastMouseMoveTime > mouseStopDelay) {
-                mouseMoving = false;
+            const currentTime = Date.now();
+            
+            // Handle random movement
+            if (!isMoving && currentTime > nextMoveTime) {
+                // Start a random movement
+                startRandomMovement();
             }
             
-            // Auto-play animations based on mouse movement
-            if (mouseMoving && actions['Walk'] && currentAction !== actions['Walk']) {
-                playAnimationAuto('Walk');
-                shouldFaceScreen = false; // Reset face screen when moving
-            } else if (!mouseMoving && actions['Idle_A'] && currentAction !== actions['Idle_A']) {
-                playAnimationAuto('Idle_A');
-                idleStartTime = Date.now(); // Record when idle started
-                shouldFaceScreen = false; // Reset face screen flag
-            }
-            
-            // Check if we should start facing the screen
-            if (!mouseMoving && currentAction === actions['Idle_A']) {
-                if (Date.now() - idleStartTime > idleFaceDelay && !shouldFaceScreen) {
-                    shouldFaceScreen = true;
-                    targetRotation = 0; // Face forward (towards screen)
+            if (isMoving) {
+                // Continue moving towards target
+                updateMovement();
+                
+                // Check if movement duration is over
+                if (currentTime - moveStartTime > moveDuration) {
+                    stopMovement();
+                }
+            } else {
+                // Auto-play idle animation if no manual animation is active
+                if (actions['Idle_A'] && currentAction !== actions['Idle_A']) {
+                    playAnimationAuto('Idle_A');
+                    idleStartTime = Date.now();
+                    shouldFaceScreen = false;
+                }
+                
+                // Check if we should start facing the screen
+                if (currentAction === actions['Idle_A']) {
+                    if (Date.now() - idleStartTime > idleFaceDelay && !shouldFaceScreen) {
+                        shouldFaceScreen = true;
+                    }
                 }
             }
         }
 
-        // Function to smoothly rotate the model
+        // Add new movement functions
+        function startRandomMovement() {
+            if (!model) return;
+            
+            // Generate random target position within radius
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * moveRadius;
+            
+            moveTarget.set(
+                Math.cos(angle) * distance,
+                model.position.y, // Keep same Y position
+                Math.sin(angle) * distance
+            );
+            
+            // Set movement parameters
+            isMoving = true;
+            moveStartTime = Date.now();
+            moveDuration = 2000 + Math.random() * 3000; // 2-5 seconds of movement
+            
+            // Schedule next movement (5-15 seconds after this one ends)
+            nextMoveTime = moveStartTime + moveDuration + 5000 + Math.random() * 10000;
+            
+            // Start walking animation if available
+            const walkAction = actions['Walk'] || actions['Walking'] || actions['Run'] || actions['Running'];
+            if (walkAction && currentAction !== walkAction) {
+                playAnimationAuto(walkAction.getClip().name);
+            }
+            
+            // Face movement direction
+            shouldFaceScreen = false;
+            
+            console.log('Starting movement to:', moveTarget);
+        }
+
+        function updateMovement() {
+            if (!model || !isMoving) return;
+            
+            // Calculate direction to target
+            const direction = new THREE.Vector3();
+            direction.subVectors(moveTarget, model.position);
+            direction.y = 0; // Keep movement on ground plane
+            
+            const distance = direction.length();
+            
+            if (distance > 0.1) {
+                // Normalize direction and apply speed
+                direction.normalize();
+                
+                // Move towards target
+                model.position.add(direction.multiplyScalar(moveSpeed));
+                
+                // Rotate to face movement direction
+                const targetRotation = Math.atan2(direction.x, direction.z);
+                model.rotation.y = targetRotation;
+            } else {
+                // Reached target
+                stopMovement();
+            }
+        }
+
+        function stopMovement() {
+            isMoving = false;
+            
+            // Return to idle animation
+            if (actions['Idle_A'] && currentAction !== actions['Idle_A']) {
+                playAnimationAuto('Idle_A');
+                idleStartTime = Date.now();
+                shouldFaceScreen = false;
+            }
+            
+            console.log('Movement stopped');
+        }
+
+        // Remove updateModelRotation function - replace with enhanced version
         function updateModelRotation() {
-            if (model) {
-                // Get current Y rotation
+            if (model && shouldFaceScreen && !isMoving) {
+                // Smoothly rotate to face the screen (rotation y = 0)
                 const currentRotation = model.rotation.y;
+                const rotationDiff = -currentRotation; // Target is 0
                 
-                // Calculate the shortest angular distance to target
-                let rotationDiff = targetRotation - currentRotation;
-                
-                // Normalize rotation difference to [-PI, PI] range
-                while (rotationDiff > Math.PI) rotationDiff -= 2 * Math.PI;
-                while (rotationDiff < -Math.PI) rotationDiff += 2 * Math.PI;
-                
-                // Apply rotation speed limit (slower when facing screen for smoother transition)
-                const rotSpeed = shouldFaceScreen ? maxRotationSpeed * 0.5 : maxRotationSpeed;
+                // Apply smooth rotation
+                const rotSpeed = 0.02; // Slow rotation speed
                 if (Math.abs(rotationDiff) > rotSpeed) {
-                    rotationDiff = Math.sign(rotationDiff) * rotSpeed;
+                    model.rotation.y += Math.sign(rotationDiff) * rotSpeed;
+                } else {
+                    model.rotation.y = 0; // Snap to exact position when close enough
                 }
-                
-                // Apply the rotation
-                model.rotation.y += rotationDiff;
             }
         }
 
@@ -594,6 +623,11 @@
         function playAnimation(animationName, listItem) {
             // Set manual animation flag to prevent auto-animations from overriding
             isManualAnimationActive = true;
+            
+            // Stop any current movement when manually controlling animations
+            if (isMoving) {
+                stopMovement();
+            }
             
             if (currentAction) {
                 currentAction.fadeOut(0.3);
@@ -647,10 +681,10 @@
             const delta = clock.getDelta();
             if (mixer) mixer.update(delta);
             
-            // Update animation state based on mouse movement
+            // Update animation state
             updateAnimationState();
             
-            // Update model rotation smoothly
+            // Update model rotation for screen facing
             updateModelRotation();
             
             renderer.render(scene, camera);
@@ -663,10 +697,8 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Add mouse event listener
-        window.addEventListener('mousemove', onMouseMove);
-        window.addEventListener('click', onMouseClick); // Add click listener
-
+        // Remove mouse move listener, keep only click listener for dog bowl interaction
+        window.addEventListener('click', onMouseClick);
 
         animate();
     </script>
