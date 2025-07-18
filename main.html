@@ -141,6 +141,45 @@
         // Scene setup
         const scene = new THREE.Scene();
 
+        // Add missing variable declarations
+        const clock = new THREE.Clock();
+        let model = null;
+        let mixer = null;
+        let actions = {};
+        let currentAction = null;
+        let dogBowl = null;
+
+        // Variables for feeding system
+        let isQuestionActive = false;
+        let isFeedingActive = false;
+        let currentQuestion = null;
+
+        // Variables for movement system
+        let isMoving = false;
+        let isManualAnimationActive = false;
+        let shouldFaceScreen = false;
+        let moveTarget = new THREE.Vector3();
+        let moveStartTime = 0;
+        let moveDuration = 0;
+        let nextMoveTime = Date.now() + 5000; // Start first movement after 5 seconds
+        let idleStartTime = 0;
+        const moveSpeed = 0.02;
+        const moveRadius = 8;
+        const idleFaceDelay = 3000; // 3 seconds
+
+        // Variables for raycasting (bowl interaction)
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // Feeding questions array
+        const feedingQuestions = [
+            {
+                question: "1+2",
+                answers: ["2", "3", "4", "999"],
+                correct: 0
+            }
+        ];
+
         // Replace the createMaterialArray function with this corrected version:
         function createMaterialArray() {
             console.log("🔍 Creating skybox materials...");
@@ -148,8 +187,9 @@
             const textureLoader = new THREE.TextureLoader();
             const materialArray = [];
             
+            // Try beautiful nature skybox first, fallback to your current one
             const texturePaths = [
-                'skyBox/DaylightBox_Right.bmp',   // right - Note: capital B
+                'skyBox/DaylightBox_Right.bmp',   // right
                 'skyBox/DaylightBox_Left.bmp',    // left  
                 'skyBox/DaylightBox_Top.bmp',     // top
                 'skyBox/DaylightBox_Bottom.bmp',  // bottom
@@ -172,6 +212,8 @@
                     (error) => {
                         console.error(`❌ FAILED: Could not load ${path}`);
                         console.error(`   Error:`, error);
+                        // Fallback to gradient if texture fails
+                        createGradientMaterial(index);
                     }
                 );
                 
@@ -185,6 +227,29 @@
             
             console.log("📦 Created", materialArray.length, "materials");
             return materialArray;
+        }
+
+        // Add beautiful gradient fallback for skybox
+        function createGradientMaterial(index) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const context = canvas.getContext('2d');
+            
+            // Create beautiful sky gradient
+            const gradient = context.createLinearGradient(0, 0, 0, 512);
+            gradient.addColorStop(0, '#87CEEB'); // Sky blue
+            gradient.addColorStop(0.5, '#98D8E8'); // Light blue
+            gradient.addColorStop(1, '#F0F8FF'); // Alice blue
+            
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, 512, 512);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            return new THREE.MeshBasicMaterial({ 
+                map: texture, 
+                side: THREE.BackSide 
+            });
         }
 
         // Create the skybox
@@ -203,61 +268,182 @@
         document.getElementById('container').appendChild(renderer.domElement);
 
         // Lighting
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.8);
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6); // Reduced ambient
         scene.add(ambientLight);
 
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 8.0);
-        directionalLight.position.set(5, 10, 5);
+        // Main directional light (sun)
+        const directionalLight = new THREE.DirectionalLight(0xffeaa7, 1.2); // Warm sunlight
+        directionalLight.position.set(10, 15, 5);
         directionalLight.castShadow = true;
         directionalLight.shadow.mapSize.width = 2048;
         directionalLight.shadow.mapSize.height = 2048;
+        directionalLight.shadow.camera.near = 0.5;
+        directionalLight.shadow.camera.far = 50;
+        directionalLight.shadow.camera.left = -20;
+        directionalLight.shadow.camera.right = 20;
+        directionalLight.shadow.camera.top = 20;
+        directionalLight.shadow.camera.bottom = -20;
         scene.add(directionalLight);
 
+        // Add fill light for softer shadows
+        const fillLight = new THREE.DirectionalLight(0x74b9ff, 0.3); // Cool fill light
+        fillLight.position.set(-5, 8, -5);
+        scene.add(fillLight);
+
+        // Add atmospheric fog for depth
+        scene.fog = new THREE.Fog(0x87CEEB, 50, 150);
+
         // Add a simple ground plane to help visualize
-        const groundGeometry = new THREE.PlaneGeometry(100, 100);
-        const groundMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
-        ground.position.y = -0.5;
-        ground.receiveShadow = true;
-        scene.add(ground);
-
-        // Variables for animation
-        let mixer;
-        let actions = {};
-        let currentAction = null;
-        const clock = new THREE.Clock();
-        let model; // Store reference to the model
-        let dogBowl; // Add reference to the dog bowl
-        const mouse = new THREE.Vector2();
-        const raycaster = new THREE.Raycaster();
-        // Remove mouse tracking variables
-        let idleStartTime = 0; // Track when idle state started
-        const idleFaceDelay = 3000; // 3 seconds delay before facing screen
-        let shouldFaceScreen = false;
-
-        // Add random movement variables
-        let isMoving = false;
-        let moveTarget = new THREE.Vector3();
-        let moveSpeed = 0.005;
-        let nextMoveTime = 0;
-        let moveDuration = 0;
-        let moveStartTime = 0;
-        const moveRadius = 3; // How far the creature can wander from center
-
-        // Quiz questions for feeding
-        const feedingQuestions = [
-            {
-                question: "1 + 1",
-                answers: ["3", "2", "Insects only", "Tree bark"],
-                correct: 1
+        function createBeautifulGround() {
+            // Create a larger, more detailed ground
+            const groundGeometry = new THREE.PlaneGeometry(200, 200, 50, 50);
+            
+            // Add some height variation for terrain
+            const vertices = groundGeometry.attributes.position.array;
+            for (let i = 0; i < vertices.length; i += 3) {
+                vertices[i + 2] = Math.random() * 0.5 - 0.25; // Random height variation
             }
-        ];
+            groundGeometry.attributes.position.needsUpdate = true;
+            groundGeometry.computeVertexNormals();
+            
+            // Create a grass-like material
+            const groundMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0x4a7c3c, // Forest green
+                transparent: true,
+                opacity: 0.9
+            });
+            
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.5;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            // Add some decorative elements
+            addEnvironmentDetails();
+        }
 
-        let currentQuestion = null;
-        let isQuestionActive = false;
-        let isFeedingActive = false; // Add this flag
-        let isManualAnimationActive = false; // Flag to prevent auto-animations from overriding manual ones
+        // Add beautiful environment details
+        function addEnvironmentDetails() {
+            // Add some trees/bushes
+            for (let i = 0; i < 20; i++) {
+                createTree(
+                    (Math.random() - 0.5) * 150, // Random X position
+                    -0.5, // Ground level
+                    (Math.random() - 0.5) * 150  // Random Z position
+                );
+            }
+            
+            // Add some rocks
+            for (let i = 0; i < 15; i++) {
+                createRock(
+                    (Math.random() - 0.5) * 100,
+                    -0.3,
+                    (Math.random() - 0.5) * 100
+                );
+            }
+            
+            // Add floating particles for ambiance
+            createFloatingParticles();
+        }
+
+        // Create simple trees
+        function createTree(x, y, z) {
+            const treeGroup = new THREE.Group();
+            
+            // Tree trunk
+            const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.5, 3);
+            const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+            trunk.position.y = 1.5;
+            trunk.castShadow = true;
+            treeGroup.add(trunk);
+            
+            // Tree foliage
+            const foliageGeometry = new THREE.SphereGeometry(2, 8, 6);
+            const foliageMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+            const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+            foliage.position.y = 4;
+            foliage.scale.y = 0.8;
+            foliage.castShadow = true;
+            treeGroup.add(foliage);
+            
+            treeGroup.position.set(x, y, z);
+            
+            // Don't place trees too close to the center (where the pet is)
+            const distanceFromCenter = Math.sqrt(x * x + z * z);
+            if (distanceFromCenter > 8) {
+                scene.add(treeGroup);
+            }
+        }
+
+        // Create decorative rocks
+        function createRock(x, y, z) {
+            const rockGeometry = new THREE.DodecahedronGeometry(0.5 + Math.random());
+            const rockMaterial = new THREE.MeshLambertMaterial({ 
+                color: new THREE.Color(0.4, 0.4, 0.4).multiplyScalar(0.5 + Math.random() * 0.5)
+            });
+            const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+            rock.position.set(x, y, z);
+            rock.rotation.set(
+                Math.random() * Math.PI,
+                Math.random() * Math.PI,
+                Math.random() * Math.PI
+            );
+            rock.castShadow = true;
+            rock.receiveShadow = true;
+            
+            // Don't place rocks too close to the center
+            const distanceFromCenter = Math.sqrt(x * x + z * z);
+            if (distanceFromCenter > 5) {
+                scene.add(rock);
+            }
+        }
+
+        // Create floating particles for magical ambiance
+        function createFloatingParticles() {
+            const particleCount = 100;
+            const particles = new THREE.BufferGeometry();
+            const positions = new Float32Array(particleCount * 3);
+            const colors = new Float32Array(particleCount * 3);
+            
+            for (let i = 0; i < particleCount; i++) {
+                // Positions
+                positions[i * 3] = (Math.random() - 0.5) * 100;
+                positions[i * 3 + 1] = Math.random() * 20 + 5;
+                positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
+                
+                // Colors (soft golden particles)
+                colors[i * 3] = 1; // R
+                colors[i * 3 + 1] = 0.8; // G
+                colors[i * 3 + 2] = 0.4; // B
+            }
+            
+            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            
+            const particleMaterial = new THREE.PointsMaterial({
+                size: 0.3,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.6,
+                blending: THREE.AdditiveBlending
+            });
+            
+            const particleSystem = new THREE.Points(particles, particleMaterial);
+            scene.add(particleSystem);
+            
+            // Animate particles
+            function animateParticles() {
+                const positions = particleSystem.geometry.attributes.position.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    positions[i + 1] += Math.sin(Date.now() * 0.001 + i) * 0.01;
+                }
+                particleSystem.geometry.attributes.position.needsUpdate = true;
+                requestAnimationFrame(animateParticles);
+            }
+            animateParticles();
+        }
 
         // Load the dog bowl GLTF model
         function loadDogBowl() {
@@ -328,9 +514,6 @@
             console.log('Fallback dog bowl created');
         }
 
-        // Load the dog bowl
-        loadDogBowl();
-
         // Function to show feeding question
         function showFeedingQuestion() {
             if (feedingQuestions.length === 0) return;
@@ -396,7 +579,7 @@
 
         // Load the GLTF model
         const loader = new GLTFLoader();
-        loader.load('./Guecko/Gecko.gltf', (gltf) => {
+        loader.load('./moskrat/Muskrat.gltf', (gltf) => {
             model = gltf.scene; // Store the model reference
             scene.add(model);
 
@@ -469,11 +652,35 @@
             // Create raycaster from camera through mouse position
             raycaster.setFromCamera(mouse, camera);
             
-            // Check if we clicked on the dog bowl
-            const intersects = raycaster.intersectObject(dogBowl, true);
+            // First check if we clicked on the dog bowl
+            const bowlIntersects = raycaster.intersectObject(dogBowl, true);
             
-            if (intersects.length > 0 && !isQuestionActive) {
+            if (bowlIntersects.length > 0 && !isQuestionActive) {
                 showFeedingQuestion();
+                return; // Don't move if we clicked the bowl
+            }
+            
+            // If not clicking on bowl, check for ground intersection for movement
+            // Create a ground plane for raycasting
+            const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.5); // Y=0.5 (ground level)
+            const intersectionPoint = new THREE.Vector3();
+            
+            // Calculate intersection with ground plane
+            if (raycaster.ray.intersectPlane(groundPlane, intersectionPoint)) {
+                // Check if the click point is within reasonable bounds
+                const maxDistance = moveRadius;
+                const clickDistance = Math.sqrt(intersectionPoint.x * intersectionPoint.x + intersectionPoint.z * intersectionPoint.z);
+                
+                if (clickDistance <= maxDistance) {
+                    // Start movement to clicked position
+                    startMovementToPosition(intersectionPoint);
+                } else {
+                    // If too far, move in that direction but limit distance
+                    const direction = new THREE.Vector3(intersectionPoint.x, 0, intersectionPoint.z).normalize();
+                    const limitedTarget = direction.multiplyScalar(maxDistance);
+                    limitedTarget.y = 0;
+                    startMovementToPosition(limitedTarget);
+                }
             }
         }
 
@@ -590,6 +797,50 @@
             console.log('Movement stopped');
         }
 
+        // Add new function to start movement to a specific position
+        function startMovementToPosition(targetPosition) {
+            if (!model) return;
+            
+            // Stop any current random movement
+            isMoving = false;
+            
+            // Set new target
+            moveTarget.copy(targetPosition);
+            moveTarget.y = model.position.y; // Keep same Y position
+            
+            // Calculate distance to determine movement duration
+            const distance = model.position.distanceTo(moveTarget);
+            
+            // Set movement parameters
+            isMoving = true;
+            moveStartTime = Date.now();
+            moveDuration = (distance / moveSpeed) * 50; // Adjust duration based on distance
+            
+            // Schedule next random movement for later (give user control for a while)
+            nextMoveTime = moveStartTime + moveDuration + 8000; // 8 seconds after movement ends
+            
+            // Start walking animation if available
+            const walkAction = actions['Walk'] || actions['Walking'] || actions['Run'] || actions['Running'];
+            if (walkAction && currentAction !== walkAction) {
+                playAnimationAuto(walkAction.getClip().name);
+            }
+            
+            // Face movement direction immediately
+            if (distance > 0.1) {
+                const direction = new THREE.Vector3();
+                direction.subVectors(moveTarget, model.position);
+                direction.y = 0;
+                direction.normalize();
+                
+                const targetRotation = Math.atan2(direction.x, direction.z);
+                model.rotation.y = targetRotation;
+            }
+            
+            shouldFaceScreen = false;
+            
+            console.log('Starting movement to clicked position:', moveTarget);
+        }
+
         // Remove updateModelRotation function - replace with enhanced version
         function updateModelRotation() {
             if (model && shouldFaceScreen && !isMoving) {
@@ -699,6 +950,11 @@
 
         // Remove mouse move listener, keep only click listener for dog bowl interaction
         window.addEventListener('click', onMouseClick);
+
+        // Also need to call createBeautifulGround() and loadDogBowl()
+        // Add these function calls after the scene setup:
+        createBeautifulGround();
+        loadDogBowl();
 
         animate();
     </script>
