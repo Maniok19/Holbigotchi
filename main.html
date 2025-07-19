@@ -846,45 +846,45 @@
                 this.hungerTimer = setInterval(() => this.updateHungerSystem(), 1000);
             }
 
-            createHungerBar() {
-                const hungerBarHTML = `
-                    <div id="hungerBar" style="
-                        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
-                        width: 300px; background: rgba(0, 0, 0, 0.8); padding: 15px;
-                        border-radius: 10px; color: white; font-family: Arial, sans-serif;
-                        z-index: 1000; border: 2px solid rgba(255, 255, 255, 0.2);
-                    ">
-                        <div style="text-align: center; margin-bottom: 8px; font-size: 14px; font-weight: bold;">
-                            <span id="hungerStatus">Well Fed</span>
-                        </div>
-                        <div style="width: 100%; height: 20px; background: #333; border-radius: 10px; overflow: hidden; margin-bottom: 8px;">
-                            <div id="hungerFill" style="
-                                width: 0%; height: 100%; background: linear-gradient(90deg, #4CAF50, #8BC34A);
-                                transition: all 0.3s ease; border-radius: 10px;
-                            "></div>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #ccc;">
-                            <span>Well Fed</span><span>Hungry</span><span>Starving</span><span>Dead</span>
-                        </div>
-                        <div id="timeWithoutFood" style="text-align: center; margin-top: 5px; font-size: 12px; color: #aaa;">
-                            Last fed: just now
-                        </div>
-                        <div style="text-align: center; margin-top: 10px;">
-                            <button id="feedButton" style="
-                                background: #4CAF50; color: white; border: none; padding: 8px 16px;
-                                border-radius: 5px; cursor: pointer; font-size: 12px;
-                            ">Feed Muskrat</button>
-                        </div>
-                    </div>
-                `;
-                
-                document.body.insertAdjacentHTML('beforeend', hungerBarHTML);
-                document.getElementById('feedButton').addEventListener('click', () => {
-                    if (!this.isQuestionActive && !this.isDead) {
-                        this.showFeedingQuestion();
-                    }
-                });
-            }
+createHungerBar() {
+    const hungerBarHTML = `
+        <div id="hungerBar" style="
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 300px; background: rgba(0, 0, 0, 0.8); padding: 15px;
+            border-radius: 10px; color: white; font-family: Arial, sans-serif;
+            z-index: 1000; border: 2px solid rgba(255, 255, 255, 0.2);
+        ">
+            <div style="text-align: center; margin-bottom: 8px; font-size: 14px; font-weight: bold;">
+                <span id="hungerStatus">Well Fed</span>
+            </div>
+            <div style="width: 100%; height: 20px; background: #333; border-radius: 10px; overflow: hidden; margin-bottom: 8px;">
+                <div id="hungerFill" style="
+                    width: 100%; height: 100%; background: linear-gradient(90deg, #4CAF50, #8BC34A);
+                    transition: all 0.3s ease; border-radius: 10px;
+                "></div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 11px; color: #ccc;">
+                <span>Dead</span><span>Starving</span><span>Hungry</span><span>Well Fed</span>
+            </div>
+            <div id="timeWithoutFood" style="text-align: center; margin-top: 5px; font-size: 12px; color: #aaa;">
+                Last fed: just now
+            </div>
+            <div style="text-align: center; margin-top: 10px;">
+                <button id="feedButton" style="
+                    background: #4CAF50; color: white; border: none; padding: 8px 16px;
+                    border-radius: 5px; cursor: pointer; font-size: 12px;
+                ">Feed Muskrat</button>
+            </div>
+        </div>
+    `;
+    
+    document.body.insertAdjacentHTML('beforeend', hungerBarHTML);
+    document.getElementById('feedButton').addEventListener('click', () => {
+        if (!this.isQuestionActive && !this.isDead) {
+            this.showFeedingQuestion();
+        }
+    });
+}
 
             updateHungerSystem() {
                 if (this.isDead) return;
@@ -902,40 +902,42 @@
                 this.updateHungerBehavior();
             }
 
-            updateHungerDisplay(timeSinceLastFeed) {
-                const hungerFill = document.getElementById('hungerFill');
-                const hungerStatus = document.getElementById('hungerStatus');
-                const timeDisplay = document.getElementById('timeWithoutFood');
-                
-                if (hungerFill && hungerStatus && timeDisplay) {
-                    hungerFill.style.width = `${this.hungerLevel}%`;
-                    
-                    if (this.hungerLevel < this.HUNGER_STAGES.HUNGRY) {
-                        hungerFill.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
-                        hungerStatus.textContent = 'Well Fed';
-                        hungerStatus.style.color = '#4CAF50';
-                    } else if (this.hungerLevel < this.HUNGER_STAGES.STARVING) {
-                        hungerFill.style.background = 'linear-gradient(90deg, #FF9800, #FFC107)';
-                        hungerStatus.textContent = 'Hungry';
-                        hungerStatus.style.color = '#FF9800';
-                    } else {
-                        hungerFill.style.background = 'linear-gradient(90deg, #f44336, #E91E63)';
-                        hungerStatus.textContent = 'Starving!';
-                        hungerStatus.style.color = '#f44336';
-                    }
-                    
-                    const hours = Math.floor(timeSinceLastFeed / 3600);
-                    const minutes = Math.floor((timeSinceLastFeed % 3600) / 60);
-                    
-                    if (hours > 0) {
-                        timeDisplay.textContent = `Last fed: ${hours}h ${minutes}m ago`;
-                    } else if (minutes > 0) {
-                        timeDisplay.textContent = `Last fed: ${minutes}m ago`;
-                    } else {
-                        timeDisplay.textContent = 'Last fed: just now';
-                    }
-                }
-            }
+updateHungerDisplay(timeSinceLastFeed) {
+    const hungerFill = document.getElementById('hungerFill');
+    const hungerStatus = document.getElementById('hungerStatus');
+    const timeDisplay = document.getElementById('timeWithoutFood');
+    
+    if (hungerFill && hungerStatus && timeDisplay) {
+        // Invert the bar - start at 100% and decrease as hunger increases
+        const healthLevel = 100 - this.hungerLevel;
+        hungerFill.style.width = `${healthLevel}%`;
+        
+        if (this.hungerLevel < this.HUNGER_STAGES.HUNGRY) {
+            hungerFill.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
+            hungerStatus.textContent = 'Well Fed';
+            hungerStatus.style.color = '#4CAF50';
+        } else if (this.hungerLevel < this.HUNGER_STAGES.STARVING) {
+            hungerFill.style.background = 'linear-gradient(90deg, #FF9800, #FFC107)';
+            hungerStatus.textContent = 'Hungry';
+            hungerStatus.style.color = '#FF9800';
+        } else {
+            hungerFill.style.background = 'linear-gradient(90deg, #f44336, #E91E63)';
+            hungerStatus.textContent = 'Starving!';
+            hungerStatus.style.color = '#f44336';
+        }
+        
+        const hours = Math.floor(timeSinceLastFeed / 3600);
+        const minutes = Math.floor((timeSinceLastFeed % 3600) / 60);
+        
+        if (hours > 0) {
+            timeDisplay.textContent = `Last fed: ${hours}h ${minutes}m ago`;
+        } else if (minutes > 0) {
+            timeDisplay.textContent = `Last fed: ${minutes}m ago`;
+        } else {
+            timeDisplay.textContent = 'Last fed: just now';
+        }
+    }
+}
 
             handleDeath() {
                 this.isDead = true;
@@ -986,32 +988,32 @@
                 }
             }
 
-            resetHunger() {
-                if (this.isDead) return;
-                
-                this.lastFeedTime = Date.now();
-                this.hungerLevel = 0;
-                this.updateHungerDisplay(0);
-                this.moveSpeed = 0.02;
-                
-                const hungerStatus = document.getElementById('hungerStatus');
-                const hungerFill = document.getElementById('hungerFill');
-                const feedButton = document.getElementById('feedButton');
-                
-                if (hungerStatus) {
-                    hungerStatus.textContent = 'Well Fed';
-                    hungerStatus.style.color = '#4CAF50';
-                }
-                if (hungerFill) {
-                    hungerFill.style.width = '0%';
-                    hungerFill.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
-                }
-                if (feedButton) {
-                    feedButton.disabled = false;
-                    feedButton.style.background = '#4CAF50';
-                    feedButton.textContent = 'Feed Muskrat';
-                }
-            }
+resetHunger() {
+    if (this.isDead) return;
+    
+    this.lastFeedTime = Date.now();
+    this.hungerLevel = 0;
+    this.updateHungerDisplay(0);
+    this.moveSpeed = 0.02;
+    
+    const hungerStatus = document.getElementById('hungerStatus');
+    const hungerFill = document.getElementById('hungerFill');
+    const feedButton = document.getElementById('feedButton');
+    
+    if (hungerStatus) {
+        hungerStatus.textContent = 'Well Fed';
+        hungerStatus.style.color = '#4CAF50';
+    }
+    if (hungerFill) {
+        hungerFill.style.width = '100%'; // Full bar when well fed
+        hungerFill.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
+    }
+    if (feedButton) {
+        feedButton.disabled = false;
+        feedButton.style.background = '#4CAF50';
+        feedButton.textContent = 'Feed Muskrat';
+    }
+}
 
             // Movement and animation
             updateAnimationState() {
