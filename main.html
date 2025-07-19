@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Muskrat Animation Viewer</title>
+    <title>Holbigotchi - Virtual Pet</title>
     <script type="importmap">
         {
             "imports": {
@@ -38,6 +38,24 @@
             overflow-y: auto;
             max-width: 250px;
         }
+        #animalSelector {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .animal-button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            margin: 3px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            width: 70px;
+        }
+        .animal-button:hover { background: #1976D2; }
+        .animal-button.active { background: #4CAF50; }
         #animationList {
             list-style: none;
             padding: 0;
@@ -53,24 +71,16 @@
             cursor: pointer;
             transition: background 0.3s;
         }
-        #animationList li:hover {
-            background: rgba(255, 255, 255, 0.2);
-        }
-        #animationList li.active {
-            background: rgba(0, 150, 255, 0.5);
-        }
+        #animationList li:hover { background: rgba(255, 255, 255, 0.2); }
+        #animationList li.active { background: rgba(0, 150, 255, 0.5); }
         #questionModal {
             position: fixed;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            width: auto;
-            height: auto;
             background: none;
             display: none;
             z-index: 1000;
-            justify-content: center;
-            align-items: flex-start;
         }
         #questionBox {
             background: rgba(0, 0, 0, 0.9);
@@ -97,33 +107,32 @@
             cursor: pointer;
             font-size: 12px;
         }
-        .answer-button:hover {
-            background: #1976D2;
-        }
+        .answer-button:hover { background: #1976D2; }
         #feedbackMessage {
             margin-top: 10px;
             font-weight: bold;
             font-size: 14px;
         }
-        .correct {
-            color: #4CAF50;
-        }
-        .incorrect {
-            color: #f44336;
-        }
+        .correct { color: #4CAF50; }
+        .incorrect { color: #f44336; }
     </style>
 </head>
 <body>
     <div id="container">
         <div id="controls">
-            <h3>Muskrat Animations</h3>
+            <div id="animalSelector">
+                <h3>Choose Animal</h3>
+                <button class="animal-button active" data-animal="muskrat">Muskrat</button>
+                <button class="animal-button" data-animal="monkey">Monkey</button>
+                <button class="animal-button" data-animal="gecko">Gecko</button>
+            </div>
+            <h3>Animations</h3>
             <ul id="animationList"></ul>
             <button id="playPause">Play</button>
             <button id="stop">Stop</button>
         </div>
     </div>
 
-    <!-- Question Modal -->
     <div id="questionModal">
         <div id="questionBox">
             <h3>Feed your Muskrat!</h3>
@@ -138,1571 +147,1286 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // Scene setup
-        const scene = new THREE.Scene();
-
-        // Add missing variable declarations
-        const clock = new THREE.Clock();
-        let model = null;
-        let mixer = null;
-        let actions = {};
-        let currentAction = null;
-        let dogBowl = null;
-
-        // Variables for feeding system
-        let isQuestionActive = false;
-        let isFeedingActive = false;
-        let currentQuestion = null;
-
-        // Variables for movement system
-        let isMoving = false;
-        let isManualAnimationActive = false;
-        let shouldFaceScreen = false;
-        let moveTarget = new THREE.Vector3();
-        let moveStartTime = 0;
-        let moveDuration = 0;
-        let nextMoveTime = Date.now() + 5000; // Start first movement after 5 seconds
-        let idleStartTime = 0;
-        let moveSpeed = 0.02;
-        const moveRadius = 8;
-        const idleFaceDelay = 3000; // 3 seconds
-
-        // Variables for raycasting (bowl interaction)
-        const raycaster = new THREE.Raycaster();
-        const mouse = new THREE.Vector2();
-
-        // Feeding questions array
-        const feedingQuestions = [
-            {
-                question: "1+2",
-                answers: ["2", "3", "4", "999"],
-                correct: 0
+        // Core application state
+        class HolbigotchiApp {
+            constructor() {
+                this.initializeVariables();
+                this.setupScene();
+                this.setupLighting();
+                this.createEnvironment();
+                this.setupEventListeners();
+                this.loadModels();
+                this.initializeHungerSystem();
+                this.animate();
             }
-        ];
 
-        // Hunger system variables
-        let lastFeedTime = Date.now(); // Track when muskrat was last fed
-        let hungerLevel = 0; // 0 = well fed, 100 = dead
-        let isDead = false;
-        let hungerTimer = null;
-
-        // Hunger system constants
-        const HUNGER_STAGES = {
-            WELL_FED: 0,
-            HUNGRY: 33.33,      // 1 day
-            STARVING: 66.66,    // 2 days  
-            DEAD: 100           // 3 days
-        };
-
-        const HUNGER_INCREASE_RATE = 100 / (3 * 24 * 60 * 60); // 100% over 3 days in seconds
-
-        // Replace the createMaterialArray function with this corrected version:
-        function createMaterialArray() {
-            console.log("🔍 Creating skybox materials...");
-            
-            const textureLoader = new THREE.TextureLoader();
-            const materialArray = [];
-            
-            // Try beautiful nature skybox first, fallback to your current one
-            const texturePaths = [
-                'skyBox/DaylightBox_Right.bmp',   // right
-                'skyBox/DaylightBox_Left.bmp',    // left  
-                'skyBox/DaylightBox_Top.bmp',     // top
-                'skyBox/DaylightBox_Bottom.bmp',  // bottom
-                'skyBox/DaylightBox_Front.bmp',   // front
-                'skyBox/DaylightBox_Back.bmp'     // back
-            ];
-            
-            texturePaths.forEach((path, index) => {
-                console.log(`📁 Attempting to load: ${path}`);
+            initializeVariables() {
+                // Scene components
+                this.scene = new THREE.Scene();
+                this.clock = new THREE.Clock();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 15000);
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
                 
-                const texture = textureLoader.load(
-                    path,
-                    (loadedTexture) => {
-                        console.log(`✅ SUCCESS: Loaded ${path}`);
-                        console.log(`   Size: ${loadedTexture.image.width}x${loadedTexture.image.height}`);
-                    },
-                    (progress) => {
-                        console.log(`⏳ Loading ${path}: ${progress.loaded}/${progress.total}`);
-                    },
-                    (error) => {
-                        console.error(`❌ FAILED: Could not load ${path}`);
-                        console.error(`   Error:`, error);
-                        // Fallback to gradient if texture fails
-                        createGradientMaterial(index);
-                    }
-                );
-                
-                materialArray.push(
-                    new THREE.MeshBasicMaterial({ 
-                        map: texture, 
-                        side: THREE.BackSide 
-                    })
-                );
-            });
-            
-            console.log("📦 Created", materialArray.length, "materials");
-            return materialArray;
-        }
+                // Model and animation
+                this.model = null;
+                this.mixer = null;
+                this.actions = {};
+                this.currentAction = null;
+                this.dogBowl = null;
+                this.currentAnimal = 'muskrat';
+                this.animalPaths = {
+                    muskrat: './moskrat/Muskrat.gltf',
+                    monkey: './Monkey/Colobus.gltf',
+                    gecko: './Guecko/Gecko.gltf'
+                };
 
-        // Add beautiful gradient fallback for skybox
-        function createGradientMaterial(index) {
-            const canvas = document.createElement('canvas');
-            canvas.width = 512;
-            canvas.height = 512;
-            const context = canvas.getContext('2d');
-            
-            // Create beautiful sky gradient
-            const gradient = context.createLinearGradient(0, 0, 0, 512);
-            gradient.addColorStop(0, '#87CEEB'); // Sky blue
-            gradient.addColorStop(0.5, '#98D8E8'); // Light blue
-            gradient.addColorStop(1, '#F0F8FF'); // Alice blue
-            
-            context.fillStyle = gradient;
-            context.fillRect(0, 0, 512, 512);
-            
-            const texture = new THREE.CanvasTexture(canvas);
-            return new THREE.MeshBasicMaterial({ 
-                map: texture, 
-                side: THREE.BackSide 
-            });
-        }
+                // Feeding system
+                this.isQuestionActive = false;
+                this.isFeedingActive = false;
+                this.currentQuestion = null;
+                this.feedingQuestions = [
+                    { question: "1+2", answers: ["2", "3", "4", "999"], correct: 1 }
+                ];
 
-        // Create the skybox
-        const materialArray = createMaterialArray();
-        const skyboxGeo = new THREE.BoxGeometry(10000, 10000, 10000);
-        const skybox = new THREE.Mesh(skyboxGeo, materialArray);
-        scene.add(skybox);
+                // Movement system
+                this.isMoving = false;
+                this.isManualAnimationActive = false;
+                this.shouldFaceScreen = false;
+                this.moveTarget = new THREE.Vector3();
+                this.moveStartTime = 0;
+                this.moveDuration = 0;
+                this.nextMoveTime = Date.now() + 5000;
+                this.idleStartTime = 0;
+                this.moveSpeed = 0.02;
+                this.moveRadius = 8;
+                this.idleFaceDelay = 3000;
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 15000);
-        // Changed from 1000 to 15000 so camera can see the 10000x10000x10000 skybox
+                // Interaction
+                this.raycaster = new THREE.Raycaster();
+                this.mouse = new THREE.Vector2();
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-        document.getElementById('container').appendChild(renderer.domElement);
-
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0x404040, 1.2); // Increased from 0.6 to 1.2
-        scene.add(ambientLight);
-
-        // Main directional light (sun) - increased intensity
-        const directionalLight = new THREE.DirectionalLight(0xffeaa7, 2.0); // Increased from 1.2 to 2.0
-        directionalLight.position.set(10, 15, 5);
-        directionalLight.castShadow = true;
-        directionalLight.shadow.mapSize.width = 2048;
-        directionalLight.shadow.mapSize.height = 2048;
-        directionalLight.shadow.camera.near = 0.5;
-        directionalLight.shadow.camera.far = 50;
-        directionalLight.shadow.camera.left = -20;
-        directionalLight.shadow.camera.right = 20;
-        directionalLight.shadow.camera.top = 20;
-        directionalLight.shadow.camera.bottom = -20;
-        scene.add(directionalLight);
-
-        // Add fill light for softer shadows - increased intensity
-        const fillLight = new THREE.DirectionalLight(0x74b9ff, 0.8); // Increased from 0.3 to 0.8
-        fillLight.position.set(-5, 8, -5);
-        scene.add(fillLight);
-
-        // Add additional rim light to brighten the creature from behind
-        const rimLight = new THREE.DirectionalLight(0xffffff, 0.6);
-        rimLight.position.set(-10, 5, -10);
-        scene.add(rimLight);
-
-        // Add a point light that follows the creature for better illumination
-        const creatureLight = new THREE.PointLight(0xffffff, 0.8, 20);
-        creatureLight.position.set(0, 3, 0); // Position above where creature will be
-        scene.add(creatureLight);
-
-        // Add hemisphere light for natural outdoor lighting
-        const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x4a7c3c, 0.4);
-        scene.add(hemisphereLight);
-
-        // Add a simple ground plane to help visualize
-        function createBeautifulGround() {
-            // Create a larger, flat ground (removed height variation)
-            const groundGeometry = new THREE.PlaneGeometry(200, 200, 50, 50);
-            
-            // Remove the height variation code - keep ground completely flat
-            // The vertices will remain at their default positions (flat plane)
-            
-            // Create a grass-like material
-            const groundMaterial = new THREE.MeshLambertMaterial({ 
-                color: 0x4a7c3c, // Forest green
-                transparent: true,
-                opacity: 0.9
-            });
-            
-            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-            ground.rotation.x = -Math.PI / 2;
-            ground.position.y = -0.5;
-            ground.receiveShadow = true;
-            scene.add(ground);
-            
-            // Add some decorative elements
-            addEnvironmentDetails();
-        }
-
-        // Add beautiful environment details
-        function addEnvironmentDetails() {
-            // Add some trees/bushes
-            for (let i = 0; i < 20; i++) {
-                createTree(
-                    (Math.random() - 0.5) * 150, // Random X position
-                    -0.5, // Ground level
-                    (Math.random() - 0.5) * 150  // Random Z position
-                );
+                // Hunger system
+                this.lastFeedTime = Date.now();
+                this.hungerLevel = 0;
+                this.isDead = false;
+                this.hungerTimer = null;
+                this.HUNGER_STAGES = { WELL_FED: 0, HUNGRY: 33.33, STARVING: 66.66, DEAD: 100 };
+                this.HUNGER_INCREASE_RATE = 100 / (3 * 24 * 60 * 60); // 100% over 3 days
             }
-            
-            // Add some rocks
-            for (let i = 0; i < 15; i++) {
-                createRock(
-                    (Math.random() - 0.5) * 100,
-                    -0.3,
-                    (Math.random() - 0.5) * 100
-                );
-            }
-            
-            // Add floating particles for ambiance
-            createFloatingParticles();
-        }
 
-        // Create simple trees
-        function createTree(x, y, z) {
-            const treeGroup = new THREE.Group();
-            
-            // Tree trunk
-            const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.5, 3);
-            const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
-            const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-            trunk.position.y = 1.5;
-            trunk.castShadow = true;
-            treeGroup.add(trunk);
-            
-            // Tree foliage
-            const foliageGeometry = new THREE.SphereGeometry(2, 8, 6);
-            const foliageMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
-            const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
-            foliage.position.y = 4;
-            foliage.scale.y = 0.8;
-            foliage.castShadow = true;
-            treeGroup.add(foliage);
-            
-            treeGroup.position.set(x, y, z);
-            
-            // Don't place trees too close to the center (where the pet is)
-            const distanceFromCenter = Math.sqrt(x * x + z * z);
-            if (distanceFromCenter > 8) {
-                scene.add(treeGroup);
-            }
-        }
+            setupScene() {
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                document.getElementById('container').appendChild(this.renderer.domElement);
 
-        // Create decorative rocks
-        function createRock(x, y, z) {
-            const rockGeometry = new THREE.DodecahedronGeometry(0.5 + Math.random());
-            const rockMaterial = new THREE.MeshLambertMaterial({ 
-                color: new THREE.Color(0.4, 0.4, 0.4).multiplyScalar(0.5 + Math.random() * 0.5)
-            });
-            const rock = new THREE.Mesh(rockGeometry, rockMaterial);
-            rock.position.set(x, y, z);
-            rock.rotation.set(
-                Math.random() * Math.PI,
-                Math.random() * Math.PI,
-                Math.random() * Math.PI
-            );
-            rock.castShadow = true;
-            rock.receiveShadow = true;
-            
-            // Don't place rocks too close to the center
-            const distanceFromCenter = Math.sqrt(x * x + z * z);
-            if (distanceFromCenter > 5) {
-                scene.add(rock);
+                // Create skybox
+                const materialArray = this.createSkyboxMaterials();
+                const skyboxGeo = new THREE.BoxGeometry(10000, 10000, 10000);
+                const skybox = new THREE.Mesh(skyboxGeo, materialArray);
+                this.scene.add(skybox);
             }
-        }
 
-        // Update the createFloatingParticles function to include both systems
-        function createFloatingParticles() {
-            // Create realistic volumetric clouds
-            createVolumetricClouds();
-            
-            // Create magical food particles
-            createMagicalParticles();
-            
-            // Create 3D floating food objects
-            createFloatingFood();
-        }
-
-        // Create realistic volumetric clouds
-        function createVolumetricClouds() {
-            const cloudGroup = new THREE.Group();
-            
-            // Create multiple cloud formations
-            for (let i = 0; i < 8; i++) {
-                const cloud = createSingleCloud();
+            createSkyboxMaterials() {
+                const textureLoader = new THREE.TextureLoader();
+                const materialArray = [];
+                const texturePaths = [
+                    'skyBox/DaylightBox_Right.bmp', 'skyBox/DaylightBox_Left.bmp',
+                    'skyBox/DaylightBox_Top.bmp', 'skyBox/DaylightBox_Bottom.bmp',
+                    'skyBox/DaylightBox_Front.bmp', 'skyBox/DaylightBox_Back.bmp'
+                ];
                 
-                // Position clouds closer and lower so they're visible
-                cloud.position.set(
-                    (Math.random() - 0.5) * 80,  // Spread across X
-                    15 + Math.random() * 10,     // Height 15-25 units
-                    (Math.random() - 0.5) * 80   // Spread across Z
-                );
-                
-                // Random rotation for variety
-                cloud.rotation.y = Math.random() * Math.PI * 2;
-                
-                cloudGroup.add(cloud);
-            }
-            
-            scene.add(cloudGroup);
-            
-            // Animate clouds slowly
-            function animateClouds() {
-                cloudGroup.rotation.y += 0.0003; // Very slow rotation
-                
-                // Individual cloud movement
-                cloudGroup.children.forEach((cloud, index) => {
-                    cloud.position.x += Math.sin(Date.now() * 0.0001 + index) * 0.01;
-                    cloud.position.z += Math.cos(Date.now() * 0.0001 + index) * 0.01;
+                texturePaths.forEach((path, index) => {
+                    const texture = textureLoader.load(
+                        path,
+                        null,
+                        null,
+                        () => this.createGradientMaterial(index)
+                    );
+                    materialArray.push(new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide }));
                 });
                 
-                requestAnimationFrame(animateClouds);
+                return materialArray;
             }
-            animateClouds();
-        }
 
-        // Create a single realistic cloud
-        function createSingleCloud() {
-            const cloudGroup = new THREE.Group();
-            
-            // Create cloud using multiple spheres with different sizes
-            const cloudParts = 8 + Math.random() * 6; // 8-14 parts per cloud
-            
-            for (let i = 0; i < cloudParts; i++) {
-                // Create cloud sphere
-                const radius = 3 + Math.random() * 4; // Random size 3-7
-                const cloudGeometry = new THREE.SphereGeometry(radius, 12, 8);
+            createGradientMaterial(index) {
+                const canvas = document.createElement('canvas');
+                canvas.width = canvas.height = 512;
+                const context = canvas.getContext('2d');
+                const gradient = context.createLinearGradient(0, 0, 0, 512);
+                gradient.addColorStop(0, '#87CEEB');
+                gradient.addColorStop(0.5, '#98D8E8');
+                gradient.addColorStop(1, '#F0F8FF');
+                context.fillStyle = gradient;
+                context.fillRect(0, 0, 512, 512);
+                const texture = new THREE.CanvasTexture(canvas);
+                return new THREE.MeshBasicMaterial({ map: texture, side: THREE.BackSide });
+            }
+
+            setupLighting() {
+                // Ambient lighting
+                const ambientLight = new THREE.AmbientLight(0x404040, 1.2);
+                this.scene.add(ambientLight);
+
+                // Main directional light (sun)
+                const directionalLight = new THREE.DirectionalLight(0xffeaa7, 2.0);
+                directionalLight.position.set(10, 15, 5);
+                directionalLight.castShadow = true;
+                this.configureShadows(directionalLight);
+                this.scene.add(directionalLight);
+
+                // Fill and rim lights
+                const fillLight = new THREE.DirectionalLight(0x74b9ff, 0.8);
+                fillLight.position.set(-5, 8, -5);
+                this.scene.add(fillLight);
+
+                const rimLight = new THREE.DirectionalLight(0xffffff, 0.6);
+                rimLight.position.set(-10, 5, -10);
+                this.scene.add(rimLight);
+
+                // Creature following light
+                this.creatureLight = new THREE.PointLight(0xffffff, 0.8, 20);
+                this.creatureLight.position.set(0, 3, 0);
+                this.scene.add(this.creatureLight);
+
+                // Hemisphere light for natural lighting
+                const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x4a7c3c, 0.4);
+                this.scene.add(hemisphereLight);
+            }
+
+            configureShadows(light) {
+                light.shadow.mapSize.width = 2048;
+                light.shadow.mapSize.height = 2048;
+                light.shadow.camera.near = 0.5;
+                light.shadow.camera.far = 50;
+                light.shadow.camera.left = -20;
+                light.shadow.camera.right = 20;
+                light.shadow.camera.top = 20;
+                light.shadow.camera.bottom = -20;
+            }
+
+            createEnvironment() {
+                this.createGround();
+                this.createTrees();
+                this.createRocks();
+                this.createParticleEffects();
+            }
+
+            createGround() {
+                const groundGeometry = new THREE.PlaneGeometry(200, 200, 50, 50);
+                const groundMaterial = new THREE.MeshLambertMaterial({ 
+                    color: 0x4a7c3c, 
+                    transparent: true, 
+                    opacity: 0.9 
+                });
+                const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+                ground.rotation.x = -Math.PI / 2;
+                ground.position.y = -0.5;
+                ground.receiveShadow = true;
+                this.scene.add(ground);
+            }
+
+            createTrees() {
+                for (let i = 0; i < 20; i++) {
+                    const x = (Math.random() - 0.5) * 150;
+                    const z = (Math.random() - 0.5) * 150;
+                    const distanceFromCenter = Math.sqrt(x * x + z * z);
+                    
+                    if (distanceFromCenter > 8) {
+                        this.createTree(x, -0.5, z);
+                    }
+                }
+            }
+
+            createTree(x, y, z) {
+                const treeGroup = new THREE.Group();
                 
-                // Create much brighter cloud material
-                const cloudMaterial = new THREE.MeshLambertMaterial({
-                    color: 0xffffff, // Pure white
+                // Trunk
+                const trunkGeometry = new THREE.CylinderGeometry(0.3, 0.5, 3);
+                const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+                const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+                trunk.position.y = 1.5;
+                trunk.castShadow = true;
+                treeGroup.add(trunk);
+                
+                // Foliage
+                const foliageGeometry = new THREE.SphereGeometry(2, 8, 6);
+                const foliageMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+                const foliage = new THREE.Mesh(foliageGeometry, foliageMaterial);
+                foliage.position.y = 4;
+                foliage.scale.y = 0.8;
+                foliage.castShadow = true;
+                treeGroup.add(foliage);
+                
+                treeGroup.position.set(x, y, z);
+                this.scene.add(treeGroup);
+            }
+
+            createRocks() {
+                for (let i = 0; i < 15; i++) {
+                    const x = (Math.random() - 0.5) * 100;
+                    const z = (Math.random() - 0.5) * 100;
+                    const distanceFromCenter = Math.sqrt(x * x + z * z);
+                    
+                    if (distanceFromCenter > 5) {
+                        this.createRock(x, -0.3, z);
+                    }
+                }
+            }
+
+            createRock(x, y, z) {
+                const rockGeometry = new THREE.DodecahedronGeometry(0.5 + Math.random());
+                const rockMaterial = new THREE.MeshLambertMaterial({ 
+                    color: new THREE.Color(0.4, 0.4, 0.4).multiplyScalar(0.5 + Math.random() * 0.5)
+                });
+                const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+                rock.position.set(x, y, z);
+                rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+                rock.castShadow = true;
+                rock.receiveShadow = true;
+                this.scene.add(rock);
+            }
+
+            createParticleEffects() {
+                this.createVolumetricClouds();
+                this.createFloatingParticles();
+                this.createFloatingFood();
+            }
+
+            createVolumetricClouds() {
+                const cloudGroup = new THREE.Group();
+                
+                for (let i = 0; i < 8; i++) {
+                    const cloud = this.createSingleCloud();
+                    cloud.position.set(
+                        (Math.random() - 0.5) * 80,
+                        15 + Math.random() * 10,
+                        (Math.random() - 0.5) * 80
+                    );
+                    cloud.rotation.y = Math.random() * Math.PI * 2;
+                    cloudGroup.add(cloud);
+                }
+                
+                this.scene.add(cloudGroup);
+                this.animateClouds(cloudGroup);
+            }
+
+            createSingleCloud() {
+                const cloudGroup = new THREE.Group();
+                const cloudParts = 8 + Math.random() * 6;
+                
+                for (let i = 0; i < cloudParts; i++) {
+                    const radius = 3 + Math.random() * 4;
+                    const cloudGeometry = new THREE.SphereGeometry(radius, 12, 8);
+                    const cloudMaterial = new THREE.MeshLambertMaterial({
+                        color: 0xffffff,
+                        transparent: true,
+                        opacity: 0.8 + Math.random() * 0.2,
+                        fog: true
+                    });
+                    
+                    const cloudSphere = new THREE.Mesh(cloudGeometry, cloudMaterial);
+                    const angle = (i / cloudParts) * Math.PI * 2;
+                    const distance = Math.random() * 8;
+                    
+                    cloudSphere.position.set(
+                        Math.cos(angle) * distance + (Math.random() - 0.5) * 6,
+                        (Math.random() - 0.5) * 4,
+                        Math.sin(angle) * distance + (Math.random() - 0.5) * 6
+                    );
+                    
+                    const scale = 0.8 + Math.random() * 0.4;
+                    cloudSphere.scale.set(scale, scale * 0.7, scale);
+                    cloudGroup.add(cloudSphere);
+                }
+                
+                return cloudGroup;
+            }
+
+            animateClouds(cloudGroup) {
+                const animate = () => {
+                    cloudGroup.rotation.y += 0.0003;
+                    cloudGroup.children.forEach((cloud, index) => {
+                        cloud.position.x += Math.sin(Date.now() * 0.0001 + index) * 0.01;
+                        cloud.position.z += Math.cos(Date.now() * 0.0001 + index) * 0.01;
+                    });
+                    requestAnimationFrame(animate);
+                };
+                animate();
+            }
+
+            createFloatingParticles() {
+                const particleCount = 80;
+                const particles = new THREE.BufferGeometry();
+                const positions = new Float32Array(particleCount * 3);
+                const colors = new Float32Array(particleCount * 3);
+                
+                for (let i = 0; i < particleCount; i++) {
+                    // Positions
+                    positions[i * 3] = (Math.random() - 0.5) * 100;
+                    positions[i * 3 + 1] = Math.random() * 15 + 2;
+                    positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
+                    
+                    // Food-like colors
+                    const foodType = Math.random();
+                    if (foodType < 0.4) {
+                        // Brown food pellets
+                        colors[i * 3] = 0.6 + Math.random() * 0.3;
+                        colors[i * 3 + 1] = 0.4 + Math.random() * 0.2;
+                        colors[i * 3 + 2] = 0.2 + Math.random() * 0.1;
+                    } else if (foodType < 0.7) {
+                        // Golden kibble
+                        colors[i * 3] = 1;
+                        colors[i * 3 + 1] = 0.8 + Math.random() * 0.2;
+                        colors[i * 3 + 2] = 0.3 + Math.random() * 0.2;
+                    } else {
+                        // Green veggie bits
+                        colors[i * 3] = 0.2 + Math.random() * 0.3;
+                        colors[i * 3 + 1] = 0.6 + Math.random() * 0.4;
+                        colors[i * 3 + 2] = 0.1 + Math.random() * 0.2;
+                    }
+                }
+                
+                particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                
+                const particleMaterial = new THREE.PointsMaterial({
+                    size: 0.8,
+                    vertexColors: true,
                     transparent: true,
-                    opacity: 0.8 + Math.random() * 0.2, // Brighter opacity 0.8-1.0
-                    fog: true
+                    opacity: 0.8,
+                    blending: THREE.AdditiveBlending
                 });
                 
-                const cloudSphere = new THREE.Mesh(cloudGeometry, cloudMaterial);
-                
-                // Position spheres to form cloud shape
-                const angle = (i / cloudParts) * Math.PI * 2;
-                const distance = Math.random() * 8;
-                
-                cloudSphere.position.set(
-                    Math.cos(angle) * distance + (Math.random() - 0.5) * 6,
-                    (Math.random() - 0.5) * 4,
-                    Math.sin(angle) * distance + (Math.random() - 0.5) * 6
-                );
-                
-                // Random scale for variety
-                const scale = 0.8 + Math.random() * 0.4;
-                cloudSphere.scale.set(scale, scale * 0.7, scale); // Flatten slightly
-                
-                cloudGroup.add(cloudSphere);
+                const particleSystem = new THREE.Points(particles, particleMaterial);
+                this.scene.add(particleSystem);
+                this.animateParticles(particleSystem);
             }
-            
-            return cloudGroup;
-        }
 
-        // Update the createMagicalParticles function to make the particles more food-like
-        function createMagicalParticles() {
-            const particleCount = 80; // Increased count for more food particles
-            const particles = new THREE.BufferGeometry();
-            const positions = new Float32Array(particleCount * 3);
-            const colors = new Float32Array(particleCount * 3);
-            
-            for (let i = 0; i < particleCount; i++) {
-                // Positions - spread them around the scene
-                positions[i * 3] = (Math.random() - 0.5) * 100;
-                positions[i * 3 + 1] = Math.random() * 15 + 2; // Float between 2-17 units high
-                positions[i * 3 + 2] = (Math.random() - 0.5) * 100;
-                
-                // Colors - make them look like food (brown/golden)
-                const foodType = Math.random();
-                if (foodType < 0.4) {
-                    // Brown food pellets
-                    colors[i * 3] = 0.6 + Math.random() * 0.3; // R
-                    colors[i * 3 + 1] = 0.4 + Math.random() * 0.2; // G
-                    colors[i * 3 + 2] = 0.2 + Math.random() * 0.1; // B
-                } else if (foodType < 0.7) {
-                    // Golden kibble
-                    colors[i * 3] = 1; // R
-                    colors[i * 3 + 1] = 0.8 + Math.random() * 0.2; // G
-                    colors[i * 3 + 2] = 0.3 + Math.random() * 0.2; // B
-                } else {
-                    // Green veggie bits
-                    colors[i * 3] = 0.2 + Math.random() * 0.3; // R
-                    colors[i * 3 + 1] = 0.6 + Math.random() * 0.4; // G
-                    colors[i * 3 + 2] = 0.1 + Math.random() * 0.2; // B
-                }
-            }
-            
-            particles.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-            particles.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-            
-            const particleMaterial = new THREE.PointsMaterial({
-                size: 0.8, // Increased size to look more like food
-                vertexColors: true,
-                transparent: true,
-                opacity: 0.8, // More opaque to look like solid food
-                blending: THREE.AdditiveBlending
-            });
-            
-            const particleSystem = new THREE.Points(particles, particleMaterial);
-            scene.add(particleSystem);
-            
-            // Animate particles to float and fall like food
-            function animateParticles() {
-                const positions = particleSystem.geometry.attributes.position.array;
-                for (let i = 0; i < positions.length; i += 3) {
-                    // Gentle floating motion
-                    positions[i + 1] += Math.sin(Date.now() * 0.001 + i) * 0.008;
-                    positions[i] += Math.cos(Date.now() * 0.0008 + i) * 0.005;
-                    
-                    // Slowly fall down and respawn at top
-                    positions[i + 1] -= 0.002; // Slow falling
-                    
-                    // Respawn at top when they fall too low
-                    if (positions[i + 1] < -2) {
-                        positions[i + 1] = 15 + Math.random() * 5; // Respawn high up
-                        positions[i] = (Math.random() - 0.5) * 100; // New random X position
-                        positions[i + 2] = (Math.random() - 0.5) * 100; // New random Z position
-                    }
-                }
-                particleSystem.geometry.attributes.position.needsUpdate = true;
-                requestAnimationFrame(animateParticles);
-            }
-            animateParticles();
-        }
-
-        // Also add some actual 3D food objects that float around
-        function createFloatingFood() {
-            const foodGroup = new THREE.Group();
-            
-            // Create different types of floating food
-            for (let i = 0; i < 15; i++) {
-                const foodType = Math.random();
-                let food;
-                
-                if (foodType < 0.4) {
-                    // Food pellets (small spheres)
-                    const pelletGeometry = new THREE.SphereGeometry(0.05, 6, 4);
-                    const pelletMaterial = new THREE.MeshLambertMaterial({ 
-                        color: new THREE.Color(0.6, 0.4, 0.2) // Brown
-                    });
-                    food = new THREE.Mesh(pelletGeometry, pelletMaterial);
-                } else if (foodType < 0.7) {
-                    // Kibble (small cubes)
-                    const kibbleGeometry = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-                    const kibbleMaterial = new THREE.MeshLambertMaterial({ 
-                        color: new THREE.Color(0.8, 0.6, 0.3) // Golden
-                    });
-                    food = new THREE.Mesh(kibbleGeometry, kibbleMaterial);
-                } else {
-                    // Veggie bits (small irregular shapes)
-                    const veggieGeometry = new THREE.DodecahedronGeometry(0.04);
-                    const veggieMaterial = new THREE.MeshLambertMaterial({ 
-                        color: new THREE.Color(0.3, 0.7, 0.2) // Green
-                    });
-                    food = new THREE.Mesh(veggieGeometry, veggieMaterial);
-                }
-                
-                // Position randomly
-                food.position.set(
-                    (Math.random() - 0.5) * 80,
-                    Math.random() * 12 + 3,
-                    (Math.random() - 0.5) * 80
-                );
-                
-                // Random rotation
-                food.rotation.set(
-                    Math.random() * Math.PI,
-                    Math.random() * Math.PI,
-                    Math.random() * Math.PI
-                );
-                
-                // Store initial position for floating animation
-                food.userData = {
-                    initialY: food.position.y,
-                    floatSpeed: 0.5 + Math.random() * 0.5,
-                    fallSpeed: 0.001 + Math.random() * 0.001
-                };
-                
-                foodGroup.add(food);
-            }
-            
-            scene.add(foodGroup);
-            
-            // Animate floating food
-            function animateFloatingFood() {
-                foodGroup.children.forEach((food, index) => {
-                    // Float up and down
-                    food.position.y += Math.sin(Date.now() * 0.001 * food.userData.floatSpeed + index) * 0.01;
-                    
-                    // Slowly rotate
-                    food.rotation.x += 0.01;
-                    food.rotation.y += 0.005;
-                    
-                    // Slowly fall
-                    food.position.y -= food.userData.fallSpeed;
-                    
-                    // Respawn at top when too low
-                    if (food.position.y < -1) {
-                        food.position.y = food.userData.initialY + Math.random() * 3;
-                        food.position.x = (Math.random() - 0.5) * 80;
-                        food.position.z = (Math.random() - 0.5) * 80;
-                    }
-                });
-                
-                requestAnimationFrame(animateFloatingFood);
-            }
-            animateFloatingFood();
-        }
-
-        // Add this function to make food fall into the bowl when fed correctly
-        function createFoodFallEffect() {
-            const foodGroup = new THREE.Group();
-            
-            // Create MORE food particles - increased from 20 to 50
-            for (let i = 0; i < 50; i++) {
-                const foodType = Math.random();
-                let food;
-                
-                if (foodType < 0.4) {
-                    // Food pellets - made slightly smaller so more can fit
-                    const pelletGeometry = new THREE.SphereGeometry(0.06, 6, 4);
-                    const pelletMaterial = new THREE.MeshLambertMaterial({ 
-                        color: new THREE.Color(0.6, 0.4, 0.2) // Brown
-                    });
-                    food = new THREE.Mesh(pelletGeometry, pelletMaterial);
-                } else if (foodType < 0.7) {
-                    // Kibble - made slightly smaller
-                    const kibbleGeometry = new THREE.BoxGeometry(0.08, 0.08, 0.08);
-                    const kibbleMaterial = new THREE.MeshLambertMaterial({ 
-                        color: new THREE.Color(0.8, 0.6, 0.3) // Golden
-                    });
-                    food = new THREE.Mesh(kibbleGeometry, kibbleMaterial);
-                } else {
-                    // Veggie bits - made slightly smaller
-                    const veggieGeometry = new THREE.DodecahedronGeometry(0.05);
-                    const veggieMaterial = new THREE.MeshLambertMaterial({ 
-                        color: new THREE.Color(0.3, 0.7, 0.2) // Green
-                    });
-                    food = new THREE.Mesh(veggieGeometry, veggieMaterial);
-                }
-                
-                // Start position - spread in multiple rings above the bowl
-                const ringIndex = Math.floor(i / 10); // 5 rings of 10 food pieces each
-                const angleInRing = (i % 10) / 10 * Math.PI * 2;
-                const ringRadius = 0.3 + (ringIndex * 0.2); // Different radiuses for each ring
-                
-                food.position.set(
-                    Math.cos(angleInRing) * ringRadius,
-                    8 + Math.random() * 4 + ringIndex, // Stagger the starting heights
-                    Math.sin(angleInRing) * ringRadius
-                );
-                
-                // Store target position - create multiple layers in the bowl
-                const targetRadius = Math.random() * 0.25; // Keep within bowl radius
-                const targetAngle = Math.random() * Math.PI * 2;
-                const layerHeight = Math.floor(i / 15) * 0.05; // Create 3-4 layers of food
-
-                food.userData = {
-                    targetX: Math.cos(targetAngle) * targetRadius,
-                    targetY: -0.35 + layerHeight, // Stack food in layers
-                    targetZ: Math.sin(targetAngle) * targetRadius,
-                    fallSpeed: 0.03 + Math.random() * 0.04, // Increased from 0.015-0.035 to 0.03-0.07 (2x faster)
-                    rotationSpeed: {
-                        x: (Math.random() - 0.5) * 0.3, // Also increased rotation speed slightly
-                        y: (Math.random() - 0.5) * 0.3,
-                        z: (Math.random() - 0.5) * 0.3
-                    }
-                };
-                
-                food.castShadow = true;
-                foodGroup.add(food);
-            }
-            
-            scene.add(foodGroup);
-            
-            // Animate food falling into bowl
-            function animateFoodFall() {
-                let allFoodLanded = true;
-                
-                foodGroup.children.forEach((food) => {
-                    if (food.position.y > food.userData.targetY) {
-                        // Still falling
-                        allFoodLanded = false;
+            animateParticles(particleSystem) {
+                const animate = () => {
+                    const positions = particleSystem.geometry.attributes.position.array;
+                    for (let i = 0; i < positions.length; i += 3) {
+                        positions[i + 1] += Math.sin(Date.now() * 0.001 + i) * 0.008;
+                        positions[i] += Math.cos(Date.now() * 0.0008 + i) * 0.005;
+                        positions[i + 1] -= 0.002;
                         
-                        // Fall towards bowl
+                        if (positions[i + 1] < -2) {
+                            positions[i + 1] = 15 + Math.random() * 5;
+                            positions[i] = (Math.random() - 0.5) * 100;
+                            positions[i + 2] = (Math.random() - 0.5) * 100;
+                        }
+                    }
+                    particleSystem.geometry.attributes.position.needsUpdate = true;
+                    requestAnimationFrame(animate);
+                };
+                animate();
+            }
+
+            createFloatingFood() {
+                const foodGroup = new THREE.Group();
+                
+                for (let i = 0; i < 15; i++) {
+                    const food = this.createFoodItem();
+                    food.position.set(
+                        (Math.random() - 0.5) * 80,
+                        Math.random() * 12 + 3,
+                        (Math.random() - 0.5) * 80
+                    );
+                    food.userData = {
+                        initialY: food.position.y,
+                        floatSpeed: 0.5 + Math.random() * 0.5,
+                        fallSpeed: 0.001 + Math.random() * 0.001
+                    };
+                    foodGroup.add(food);
+                }
+                
+                this.scene.add(foodGroup);
+                this.animateFloatingFood(foodGroup);
+            }
+
+            createFoodItem() {
+                const foodType = Math.random();
+                let geometry, material, color;
+                
+                if (foodType < 0.4) {
+                    geometry = new THREE.SphereGeometry(0.05, 6, 4);
+                    color = new THREE.Color(0.6, 0.4, 0.2);
+                } else if (foodType < 0.7) {
+                    geometry = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+                    color = new THREE.Color(0.8, 0.6, 0.3);
+                } else {
+                    geometry = new THREE.DodecahedronGeometry(0.04);
+                    color = new THREE.Color(0.3, 0.7, 0.2);
+                }
+                
+                material = new THREE.MeshLambertMaterial({ color });
+                return new THREE.Mesh(geometry, material);
+            }
+
+            animateFloatingFood(foodGroup) {
+                const animate = () => {
+                    foodGroup.children.forEach((food, index) => {
+                        food.position.y += Math.sin(Date.now() * 0.001 * food.userData.floatSpeed + index) * 0.01;
+                        food.rotation.x += 0.01;
+                        food.rotation.y += 0.005;
                         food.position.y -= food.userData.fallSpeed;
                         
-                        // Move towards bowl center as it falls
-                        const centerDirection = new THREE.Vector3(
-                            food.userData.targetX - food.position.x,
-                            0,
-                            food.userData.targetZ - food.position.z
-                        );
-                        centerDirection.multiplyScalar(0.02);
-                        food.position.add(centerDirection);
-                        
-                        // Rotate while falling
-                        food.rotation.x += food.userData.rotationSpeed.x;
-                        food.rotation.y += food.userData.rotationSpeed.y;
-                        food.rotation.z += food.userData.rotationSpeed.z;
-                    } else {
-                        // Landed in bowl - stop at bowl level and settle
-                        food.position.y = food.userData.targetY;
-                        food.position.x = food.userData.targetX;
-                        food.position.z = food.userData.targetZ;
-                        
-                        // Stop rotation when landed
-                        food.rotation.x = 0;
-                        food.rotation.z = 0;
-                    }
-                });
-                
-                // Continue animation until all food has landed
-                if (!allFoodLanded) {
-                    requestAnimationFrame(animateFoodFall);
-                } else {
-                    // All food landed, start cleanup after a longer delay
-                    setTimeout(() => {
-                        // Gradually fade out and remove the food
-                        let opacity = 1;
-                        function fadeOut() {
-                            opacity -= 0.01; // Slower fade for more food
-                            foodGroup.children.forEach(food => {
-                                if (food.material) {
-                                    food.material.transparent = true;
-                                    food.material.opacity = opacity;
-                                }
-                            });
-                            
-                            if (opacity > 0) {
-                                requestAnimationFrame(fadeOut);
-                            } else {
-                                scene.remove(foodGroup);
-                            }
+                        if (food.position.y < -1) {
+                            food.position.y = food.userData.initialY + Math.random() * 3;
+                            food.position.x = (Math.random() - 0.5) * 80;
+                            food.position.z = (Math.random() - 0.5) * 80;
                         }
-                        fadeOut();
-                    }, 5000); // Wait 5 seconds before fading out to enjoy the full bowl
-                }
+                    });
+                    requestAnimationFrame(animate);
+                };
+                animate();
             }
-            
-            animateFoodFall();
-        }
 
-        // Load the dog bowl GLTF model
-        function loadDogBowl() {
-            const bowlLoader = new GLTFLoader();
-            bowlLoader.load('./dog_bowl/DogBowlFBX.gltf', (gltf) => {
-                dogBowl = gltf.scene;
-                
-                // Position the bowl in the center of the scene
-                dogBowl.position.set(0, -0.57, 0);
-                dogBowl.name = 'dogBowl'; // Name it for raycasting
-                
-                // Scale the bowl if needed (adjust as necessary)
-                dogBowl.scale.set(1, 1, 1);
-                
-                // Enable shadows
-                dogBowl.traverse((child) => {
+            loadModels() {
+                this.loadMuskrat();
+                this.loadDogBowl();
+            }
+
+            loadMuskrat() {
+                const loader = new GLTFLoader();
+                loader.load('./moskrat/Muskrat.gltf', (gltf) => {
+                    this.model = gltf.scene;
+                    this.scene.add(this.model);
+                    this.setupModelProperties(gltf);
+                    this.setupAnimations(gltf);
+                    this.positionCamera();
+                });
+            }
+
+            setupModelProperties(gltf) {
+                this.model.traverse((child) => {
                     if (child.isMesh) {
                         child.castShadow = true;
                         child.receiveShadow = true;
+                        this.brightenMaterial(child.material);
                     }
                 });
-                
-                scene.add(dogBowl);
-                console.log('Dog bowl loaded successfully');
-            }, (progress) => {
-                console.log('Dog bowl loading progress:', progress);
-            }, (error) => {
-                console.error('Error loading dog bowl GLTF model:', error);
-                // Fallback: create a simple bowl if the model fails to load
-                createFallbackDogBowl();
-            });
-        }
 
-        // Fallback function to create a simple bowl if GLTF loading fails
-        function createFallbackDogBowl() {
-            const bowlGroup = new THREE.Group();
-            
-            // Bowl base (cylinder)
-            const bowlGeometry = new THREE.CylinderGeometry(0.3, 0.2, 0.1, 16);
-            const bowlMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Brown color
-            const bowl = new THREE.Mesh(bowlGeometry, bowlMaterial);
-            bowl.position.y = 0.05;
-            bowl.castShadow = true;
-            bowl.receiveShadow = true;
-            bowlGroup.add(bowl);
-            
-            // Bowl inner (slightly smaller cylinder for the inside)
-            const innerGeometry = new THREE.CylinderGeometry(0.25, 0.18, 0.08, 16);
-            const innerMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 }); // Darker brown
-            const inner = new THREE.Mesh(innerGeometry, innerMaterial);
-            inner.position.y = 0.09;
-            bowlGroup.add(inner);
-            
-            // Food in the bowl (small sphere)
-            const foodGeometry = new THREE.SphereGeometry(0.15, 8, 6);
-            const foodMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 }); // Brown food
-            const food = new THREE.Mesh(foodGeometry, foodMaterial);
-            food.position.y = 0.12;
-            food.scale.y = 0.3; // Flatten it a bit
-            bowlGroup.add(food);
-            
-            // Position the bowl in the center of the scene
-            bowlGroup.position.set(0, 0, 0);
-            bowlGroup.name = 'dogBowl'; // Name it for raycasting
-            
-            dogBowl = bowlGroup;
-            scene.add(dogBowl);
-            console.log('Fallback dog bowl created');
-        }
-
-        // Function to show feeding question
-        function showFeedingQuestion() {
-            if (feedingQuestions.length === 0) return;
-            
-            isQuestionActive = true;
-            isFeedingActive = true;
-            
-            // Select a random question
-            currentQuestion = feedingQuestions[Math.floor(Math.random() * feedingQuestions.length)];
-            
-            // Update modal content
-            document.getElementById('questionText').textContent = currentQuestion.question;
-            
-            // Clear previous buttons
-            const answerButtons = document.getElementById('answerButtons');
-            answerButtons.innerHTML = '';
-            
-            // Create answer buttons
-            currentQuestion.answers.forEach((answer, index) => {
-                const button = document.createElement('button');
-                button.textContent = answer;
-                button.className = 'answer-button';
-                button.onclick = () => checkAnswer(index);
-                answerButtons.appendChild(button);
-            });
-            
-            // Clear feedback and hide close button
-            document.getElementById('feedbackMessage').innerHTML = '';
-            document.getElementById('closeModal').style.display = 'none';
-            
-            // Show modal
-            document.getElementById('questionModal').style.display = 'flex';
-        }
-
-        // Update the checkAnswer function to make the muskrat go to the bowl when fed correctly
-        // Update the checkAnswer function to make the modal close automatically after correct answers
-function checkAnswer(selectedIndex) {
-    const feedbackElement = document.getElementById('feedbackMessage');
-    const closeButton = document.getElementById('closeModal');
-    
-    if (selectedIndex === currentQuestion.correct) {
-        feedbackElement.innerHTML = '<span class="correct">Correct! Your muskrat is going to eat!</span>';
-        
-        // Reset hunger when successfully fed
-        resetHunger();
-        
-        // Make the muskrat go to the bowl to eat
-        setTimeout(() => {
-            makeEatAtBowl();
-        }, 1000); // Wait 1 second before muskrat starts moving
-
-        // Trigger food fall effect
-        createFoodFallEffect();
-        
-        // Auto-close modal after 3 seconds for correct answers (no close button needed)
-        setTimeout(() => {
-            document.getElementById('questionModal').style.display = 'none';
-            isQuestionActive = false;
-            isFeedingActive = false;
-        }, 3000);
-        
-    } else {
-        feedbackElement.innerHTML = '<span class="incorrect">Wrong answer. Your muskrat is still hungry!</span>';
-        
-        // Show close button only for wrong answers
-        closeButton.style.display = 'inline-block';
-        closeButton.onclick = () => {
-            document.getElementById('questionModal').style.display = 'none';
-            isQuestionActive = false;
-            isFeedingActive = false;
-        };
-    }
-    
-    // Disable answer buttons
-    const buttons = document.querySelectorAll('.answer-button');
-    buttons.forEach(button => button.disabled = true);
-}
-
-        // Hunger system functions
-        function createHungerBar() {
-            // Create hunger bar HTML
-            const hungerBarHTML = `
-                <div id="hungerBar" style="
-                    position: fixed;
-                    bottom: 20px;
-                    left: 50%;
-                    transform: translateX(-50%);
-                    width: 300px;
-                    background: rgba(0, 0, 0, 0.8);
-                    padding: 15px;
-                    border-radius: 10px;
-                    color: white;
-                    font-family: Arial, sans-serif;
-                    z-index: 1000;
-                    border: 2px solid rgba(255, 255, 255, 0.2);
-                ">
-                    <div style="text-align: center; margin-bottom: 8px; font-size: 14px; font-weight: bold;">
-                        <span id="hungerStatus">Well Fed</span>
-                    </div>
-                    <div style="width: 100%; height: 20px; background: #333; border-radius: 10px; overflow: hidden; margin-bottom: 8px;">
-                        <div id="hungerFill" style="
-                            width: 0%;
-                            height: 100%;
-                            background: linear-gradient(90deg, #4CAF50, #8BC34A);
-                            transition: all 0.3s ease;
-                            border-radius: 10px;
-                        "></div>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: #ccc;">
-                        <span>Well Fed</span>
-                        <span>Hungry</span>
-                        <span>Starving</span>
-                        <span>Dead</span>
-                    </div>
-                    <div id="timeWithoutFood" style="text-align: center; margin-top: 5px; font-size: 12px; color: #aaa;">
-                        Last fed: just now
-                    </div>
-                    <div style="text-align: center; margin-top: 10px;">
-                        <button id="feedButton" style="
-                            background: #4CAF50;
-                            color: white;
-                            border: none;
-                            padding: 8px 16px;
-                            border-radius: 5px;
-                            cursor: pointer;
-                            font-size: 12px;
-                        ">Feed Muskrat</button>
-                    </div>
-                </div>
-            `;
-            
-            // Add to page
-            document.body.insertAdjacentHTML('beforeend', hungerBarHTML);
-            
-            // Add feed button event listener
-            document.getElementById('feedButton').addEventListener('click', () => {
-                if (!isQuestionActive && !isDead) {
-                    showFeedingQuestion();
-                }
-            });
-        }
-
-        function updateHungerSystem() {
-            if (isDead) return; // Don't update if already dead
-            
-            const currentTime = Date.now();
-            const timeSinceLastFeed = (currentTime - lastFeedTime) / 1000; // in seconds
-            
-            // Increase hunger over time (reaches 100% after 3 days)
-            hungerLevel = Math.min(100, timeSinceLastFeed * HUNGER_INCREASE_RATE);
-            
-            // Check for death
-            if (hungerLevel >= HUNGER_STAGES.DEAD) {
-                handleDeath();
-                return;
+                // Position model on ground
+                const box = new THREE.Box3().setFromObject(this.model);
+                const center = box.getCenter(new THREE.Vector3());
+                this.model.position.x -= center.x;
+                this.model.position.z -= center.z;
+                this.model.position.y = -box.min.y - 0.6;
             }
-            
-            // Update hunger display
-            updateHungerDisplay(timeSinceLastFeed);
-            
-            // Update muskrat behavior based on hunger
-            updateHungerBehavior();
-        }
 
-        function updateHungerDisplay(timeSinceLastFeed) {
-            const hungerFill = document.getElementById('hungerFill');
-            const hungerStatus = document.getElementById('hungerStatus');
-            const timeDisplay = document.getElementById('timeWithoutFood');
-            
-            if (hungerFill && hungerStatus && timeDisplay) {
-                // Update hunger bar
-                hungerFill.style.width = `${hungerLevel}%`;
-                
-                // Change bar color and status based on hunger level
-                if (hungerLevel < HUNGER_STAGES.HUNGRY) {
-                    hungerFill.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)'; // Green
-                    hungerStatus.textContent = 'Well Fed';
-                    hungerStatus.style.color = '#4CAF50';
-                } else if (hungerLevel < HUNGER_STAGES.STARVING) {
-                    hungerFill.style.background = 'linear-gradient(90deg, #FF9800, #FFC107)'; // Orange
-                    hungerStatus.textContent = 'Hungry';
-                    hungerStatus.style.color = '#FF9800';
-                } else if (hungerLevel < HUNGER_STAGES.DEAD) {
-                    hungerFill.style.background = 'linear-gradient(90deg, #f44336, #E91E63)'; // Red
-                    hungerStatus.textContent = 'Starving!';
-                    hungerStatus.style.color = '#f44336';
+            brightenMaterial(material) {
+                if (Array.isArray(material)) {
+                    material.forEach(mat => {
+                        if (mat.color) mat.color.multiplyScalar(1.5);
+                        mat.needsUpdate = true;
+                    });
+                } else if (material.color) {
+                    material.color.multiplyScalar(1.5);
+                    material.needsUpdate = true;
                 }
+            }
+
+            setupAnimations(gltf) {
+                if (gltf.animations && gltf.animations.length > 0) {
+                    this.mixer = new THREE.AnimationMixer(this.model);
+                    const animationList = document.getElementById('animationList');
+                    
+                    gltf.animations.forEach((clip) => {
+                        const action = this.mixer.clipAction(clip);
+                        this.actions[clip.name] = action;
+                        
+                        const li = document.createElement('li');
+                        li.textContent = clip.name;
+                        li.addEventListener('click', () => this.playAnimation(clip.name, li));
+                        animationList.appendChild(li);
+                    });
+                }
+            }
+
+            positionCamera() {
+                const box = new THREE.Box3().setFromObject(this.model);
+                const size = box.getSize(new THREE.Vector3());
+                const maxDimension = Math.max(size.x, size.y, size.z);
+                const cameraDistance = maxDimension / 30;
                 
-                // Update time display
-                const hours = Math.floor(timeSinceLastFeed / 3600);
-                const minutes = Math.floor((timeSinceLastFeed % 3600) / 60);
+                this.camera.position.set(cameraDistance * 2, cameraDistance * 1, cameraDistance * 3);
+                this.camera.lookAt(0, 0, 0);
+                this.camera.far = 15000;
+                this.camera.updateProjectionMatrix();
+            }
+
+            loadDogBowl() {
+                const bowlLoader = new GLTFLoader();
+                bowlLoader.load('./dog_bowl/DogBowlFBX.gltf', (gltf) => {
+                    this.dogBowl = gltf.scene;
+                    this.dogBowl.position.set(0, -0.57, 0);
+                    this.dogBowl.name = 'dogBowl';
+                    this.dogBowl.traverse((child) => {
+                        if (child.isMesh) {
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        }
+                    });
+                    this.scene.add(this.dogBowl);
+                }, null, () => this.createFallbackDogBowl());
+            }
+
+            createFallbackDogBowl() {
+                const bowlGroup = new THREE.Group();
                 
-                if (hours > 0) {
-                    timeDisplay.textContent = `Last fed: ${hours}h ${minutes}m ago`;
-                } else if (minutes > 0) {
-                    timeDisplay.textContent = `Last fed: ${minutes}m ago`;
+                const bowlGeometry = new THREE.CylinderGeometry(0.3, 0.2, 0.1, 16);
+                const bowlMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+                const bowl = new THREE.Mesh(bowlGeometry, bowlMaterial);
+                bowl.position.y = 0.05;
+                bowl.castShadow = true;
+                bowl.receiveShadow = true;
+                bowlGroup.add(bowl);
+                
+                bowlGroup.position.set(0, 0, 0);
+                bowlGroup.name = 'dogBowl';
+                this.dogBowl = bowlGroup;
+                this.scene.add(this.dogBowl);
+            }
+
+            // Feeding system
+            showFeedingQuestion() {
+                if (this.feedingQuestions.length === 0) return;
+                
+                this.isQuestionActive = true;
+                this.isFeedingActive = true;
+                this.currentQuestion = this.feedingQuestions[Math.floor(Math.random() * this.feedingQuestions.length)];
+                
+                document.getElementById('questionText').textContent = this.currentQuestion.question;
+                
+                const answerButtons = document.getElementById('answerButtons');
+                answerButtons.innerHTML = '';
+                
+                this.currentQuestion.answers.forEach((answer, index) => {
+                    const button = document.createElement('button');
+                    button.textContent = answer;
+                    button.className = 'answer-button';
+                    button.onclick = () => this.checkAnswer(index);
+                    answerButtons.appendChild(button);
+                });
+                
+                document.getElementById('feedbackMessage').innerHTML = '';
+                document.getElementById('closeModal').style.display = 'none';
+                document.getElementById('questionModal').style.display = 'flex';
+            }
+
+            checkAnswer(selectedIndex) {
+                const feedbackElement = document.getElementById('feedbackMessage');
+                const closeButton = document.getElementById('closeModal');
+                
+                if (selectedIndex === this.currentQuestion.correct) {
+                    feedbackElement.innerHTML = '<span class="correct">Correct! Your muskrat is going to eat!</span>';
+                    this.resetHunger();
+                    setTimeout(() => this.makeEatAtBowl(), 1000);
+                    this.createFoodFallEffect();
+                    setTimeout(() => {
+                        document.getElementById('questionModal').style.display = 'none';
+                        this.isQuestionActive = false;
+                        this.isFeedingActive = false;
+                    }, 3000);
                 } else {
-                    timeDisplay.textContent = 'Last fed: just now';
+                    feedbackElement.innerHTML = '<span class="incorrect">Wrong answer. Your muskrat is still hungry!</span>';
+                    closeButton.style.display = 'inline-block';
+                    closeButton.onclick = () => {
+                        document.getElementById('questionModal').style.display = 'none';
+                        this.isQuestionActive = false;
+                        this.isFeedingActive = false;
+                    };
                 }
-            }
-        }
-
-        function handleDeath() {
-            isDead = true;
-            
-            // Update display to show death
-            const hungerStatus = document.getElementById('hungerStatus');
-            const timeDisplay = document.getElementById('timeWithoutFood');
-            const hungerFill = document.getElementById('hungerFill');
-            const feedButton = document.getElementById('feedButton');
-            
-            if (hungerStatus) {
-                hungerStatus.textContent = '💀 DEAD';
-                hungerStatus.style.color = '#000';
-            }
-            if (timeDisplay) timeDisplay.textContent = 'Starved to death...';
-            if (hungerFill) hungerFill.style.background = '#000';
-            if (feedButton) {
-                feedButton.disabled = true;
-                feedButton.style.background = '#666';
-                feedButton.textContent = 'Dead';
-            }
-            
-            // Play death animation if available
-            if (actions['Death'] || actions['Sad'] || actions['Lying']) {
-                const deathAnimation = actions['Death'] || actions['Sad'] || actions['Lying'];
-                playAnimationAuto(deathAnimation.getClip().name);
-            }
-            
-            // Stop all movement
-            isMoving = false;
-            isManualAnimationActive = true; // Prevent other animations
-            
-            // Show death message
-            setTimeout(() => {
-                alert('💀 Your muskrat has died from starvation! Refresh the page to start over.');
-            }, 2000);
-        }
-
-        function updateHungerBehavior() {
-            if (isFeedingActive || isDead || isManualAnimationActive) return;
-            
-            // Make the muskrat move slower when hungry/starving
-            if (hungerLevel >= HUNGER_STAGES.HUNGRY) {
-                // Could reduce movement speed here
-                moveSpeed = 0.01; // Slower when hungry
-            } else {
-                moveSpeed = 0.02; // Normal speed
-            }
-            
-            // Show sad/hungry animations when hungry
-            if (hungerLevel >= HUNGER_STAGES.HUNGRY && !isMoving) {
-                // Increase chance of sad animation as hunger increases
-                const sadChance = (hungerLevel / 100) * 0.003; // Higher hunger = more sad animations
                 
-                if (Math.random() < sadChance) {
-                    if (actions['Sad'] || actions['Idle_B']) {
-                        const hungryAnimation = actions['Sad'] || actions['Idle_B'];
-                        playAnimationAuto(hungryAnimation.getClip().name);
+                document.querySelectorAll('.answer-button').forEach(button => button.disabled = true);
+            }
+
+            createFoodFallEffect() {
+                const foodGroup = new THREE.Group();
+                
+                for (let i = 0; i < 50; i++) {
+                    const food = this.createFoodItem();
+                    const ringIndex = Math.floor(i / 10);
+                    const angleInRing = (i % 10) / 10 * Math.PI * 2;
+                    const ringRadius = 0.3 + (ringIndex * 0.2);
+                    
+                    food.position.set(
+                        Math.cos(angleInRing) * ringRadius,
+                        8 + Math.random() * 4 + ringIndex,
+                        Math.sin(angleInRing) * ringRadius
+                    );
+                    
+                    const targetRadius = Math.random() * 0.25;
+                    const targetAngle = Math.random() * Math.PI * 2;
+                    const layerHeight = Math.floor(i / 15) * 0.05;
+
+                    food.userData = {
+                        targetX: Math.cos(targetAngle) * targetRadius,
+                        targetY: -0.35 + layerHeight,
+                        targetZ: Math.sin(targetAngle) * targetRadius,
+                        fallSpeed: 0.03 + Math.random() * 0.04,
+                        rotationSpeed: {
+                            x: (Math.random() - 0.5) * 0.3,
+                            y: (Math.random() - 0.5) * 0.3,
+                            z: (Math.random() - 0.5) * 0.3
+                        }
+                    };
+                    
+                    food.castShadow = true;
+                    foodGroup.add(food);
+                }
+                
+                this.scene.add(foodGroup);
+                this.animateFoodFall(foodGroup);
+            }
+
+            animateFoodFall(foodGroup) {
+                const animate = () => {
+                    let allFoodLanded = true;
+                    
+                    foodGroup.children.forEach((food) => {
+                        if (food.position.y > food.userData.targetY) {
+                            allFoodLanded = false;
+                            food.position.y -= food.userData.fallSpeed;
+                            
+                            const centerDirection = new THREE.Vector3(
+                                food.userData.targetX - food.position.x,
+                                0,
+                                food.userData.targetZ - food.position.z
+                            );
+                            centerDirection.multiplyScalar(0.02);
+                            food.position.add(centerDirection);
+                            
+                            food.rotation.x += food.userData.rotationSpeed.x;
+                            food.rotation.y += food.userData.rotationSpeed.y;
+                            food.rotation.z += food.userData.rotationSpeed.z;
+                        } else {
+                            food.position.y = food.userData.targetY;
+                            food.position.x = food.userData.targetX;
+                            food.position.z = food.userData.targetZ;
+                            food.rotation.x = 0;
+                            food.rotation.z = 0;
+                        }
+                    });
+                    
+                    if (!allFoodLanded) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        setTimeout(() => this.fadeOutFood(foodGroup), 5000);
+                    }
+                };
+                animate();
+            }
+
+            fadeOutFood(foodGroup) {
+                let opacity = 1;
+                const fade = () => {
+                    opacity -= 0.01;
+                    foodGroup.children.forEach(food => {
+                        if (food.material) {
+                            food.material.transparent = true;
+                            food.material.opacity = opacity;
+                        }
+                    });
+                    
+                    if (opacity > 0) {
+                        requestAnimationFrame(fade);
+                    } else {
+                        this.scene.remove(foodGroup);
+                    }
+                };
+                fade();
+            }
+
+            // Hunger system
+            initializeHungerSystem() {
+                this.createHungerBar();
+                this.hungerTimer = setInterval(() => this.updateHungerSystem(), 1000);
+            }
+
+            createHungerBar() {
+                const hungerBarHTML = `
+                    <div id="hungerBar" style="
+                        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+                        width: 300px; background: rgba(0, 0, 0, 0.8); padding: 15px;
+                        border-radius: 10px; color: white; font-family: Arial, sans-serif;
+                        z-index: 1000; border: 2px solid rgba(255, 255, 255, 0.2);
+                    ">
+                        <div style="text-align: center; margin-bottom: 8px; font-size: 14px; font-weight: bold;">
+                            <span id="hungerStatus">Well Fed</span>
+                        </div>
+                        <div style="width: 100%; height: 20px; background: #333; border-radius: 10px; overflow: hidden; margin-bottom: 8px;">
+                            <div id="hungerFill" style="
+                                width: 0%; height: 100%; background: linear-gradient(90deg, #4CAF50, #8BC34A);
+                                transition: all 0.3s ease; border-radius: 10px;
+                            "></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; font-size: 11px; color: #ccc;">
+                            <span>Well Fed</span><span>Hungry</span><span>Starving</span><span>Dead</span>
+                        </div>
+                        <div id="timeWithoutFood" style="text-align: center; margin-top: 5px; font-size: 12px; color: #aaa;">
+                            Last fed: just now
+                        </div>
+                        <div style="text-align: center; margin-top: 10px;">
+                            <button id="feedButton" style="
+                                background: #4CAF50; color: white; border: none; padding: 8px 16px;
+                                border-radius: 5px; cursor: pointer; font-size: 12px;
+                            ">Feed Muskrat</button>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.insertAdjacentHTML('beforeend', hungerBarHTML);
+                document.getElementById('feedButton').addEventListener('click', () => {
+                    if (!this.isQuestionActive && !this.isDead) {
+                        this.showFeedingQuestion();
+                    }
+                });
+            }
+
+            updateHungerSystem() {
+                if (this.isDead) return;
+                
+                const currentTime = Date.now();
+                const timeSinceLastFeed = (currentTime - this.lastFeedTime) / 1000;
+                this.hungerLevel = Math.min(100, timeSinceLastFeed * this.HUNGER_INCREASE_RATE);
+                
+                if (this.hungerLevel >= this.HUNGER_STAGES.DEAD) {
+                    this.handleDeath();
+                    return;
+                }
+                
+                this.updateHungerDisplay(timeSinceLastFeed);
+                this.updateHungerBehavior();
+            }
+
+            updateHungerDisplay(timeSinceLastFeed) {
+                const hungerFill = document.getElementById('hungerFill');
+                const hungerStatus = document.getElementById('hungerStatus');
+                const timeDisplay = document.getElementById('timeWithoutFood');
+                
+                if (hungerFill && hungerStatus && timeDisplay) {
+                    hungerFill.style.width = `${this.hungerLevel}%`;
+                    
+                    if (this.hungerLevel < this.HUNGER_STAGES.HUNGRY) {
+                        hungerFill.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
+                        hungerStatus.textContent = 'Well Fed';
+                        hungerStatus.style.color = '#4CAF50';
+                    } else if (this.hungerLevel < this.HUNGER_STAGES.STARVING) {
+                        hungerFill.style.background = 'linear-gradient(90deg, #FF9800, #FFC107)';
+                        hungerStatus.textContent = 'Hungry';
+                        hungerStatus.style.color = '#FF9800';
+                    } else {
+                        hungerFill.style.background = 'linear-gradient(90deg, #f44336, #E91E63)';
+                        hungerStatus.textContent = 'Starving!';
+                        hungerStatus.style.color = '#f44336';
+                    }
+                    
+                    const hours = Math.floor(timeSinceLastFeed / 3600);
+                    const minutes = Math.floor((timeSinceLastFeed % 3600) / 60);
+                    
+                    if (hours > 0) {
+                        timeDisplay.textContent = `Last fed: ${hours}h ${minutes}m ago`;
+                    } else if (minutes > 0) {
+                        timeDisplay.textContent = `Last fed: ${minutes}m ago`;
+                    } else {
+                        timeDisplay.textContent = 'Last fed: just now';
                     }
                 }
             }
-        }
 
-        function resetHunger() {
-            if (isDead) return; // Can't revive the dead
-            
-            lastFeedTime = Date.now();
-            hungerLevel = 0;
-            updateHungerDisplay(0);
-            
-            // Reset movement speed
-            moveSpeed = 0.02;
-            
-            // Update hunger status immediately
-            const hungerStatus = document.getElementById('hungerStatus');
-            const hungerFill = document.getElementById('hungerFill');
-            const feedButton = document.getElementById('feedButton');
-            
-            if (hungerStatus) {
-                hungerStatus.textContent = 'Well Fed';
-                hungerStatus.style.color = '#4CAF50';
+            handleDeath() {
+                this.isDead = true;
+                
+                const hungerStatus = document.getElementById('hungerStatus');
+                const timeDisplay = document.getElementById('timeWithoutFood');
+                const hungerFill = document.getElementById('hungerFill');
+                const feedButton = document.getElementById('feedButton');
+                
+                if (hungerStatus) {
+                    hungerStatus.textContent = '💀 DEAD';
+                    hungerStatus.style.color = '#000';
+                }
+                if (timeDisplay) timeDisplay.textContent = 'Starved to death...';
+                if (hungerFill) hungerFill.style.background = '#000';
+                if (feedButton) {
+                    feedButton.disabled = true;
+                    feedButton.style.background = '#666';
+                    feedButton.textContent = 'Dead';
+                }
+                
+                const deathAnimation = this.actions['Death'] || this.actions['Sad'] || this.actions['Lying'];
+                if (deathAnimation) {
+                    this.playAnimationAuto(deathAnimation.getClip().name);
+                }
+                
+                this.isMoving = false;
+                this.isManualAnimationActive = true;
+                
+                setTimeout(() => {
+                    alert('💀 Your muskrat has died from starvation! Refresh the page to start over.');
+                }, 2000);
             }
-            if (hungerFill) {
-                hungerFill.style.width = '0%';
-                hungerFill.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
-            }
-            if (feedButton) {
-                feedButton.disabled = false;
-                feedButton.style.background = '#4CAF50';
-                feedButton.textContent = 'Feed Muskrat';
-            }
-        }
 
-        // Load the GLTF model
-        const loader = new GLTFLoader();
-        loader.load('./moskrat/Muskrat.gltf', (gltf) => {
-            model = gltf.scene; // Store the model reference
-            scene.add(model);
-
-            // Brighten the model materials
-            model.traverse((child) => {
-                if (child.isMesh) {
-                    // Enable shadow casting/receiving
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                    
-                    // Brighten the materials
-                    if (child.material) {
-                        // If it's an array of materials
-                        if (Array.isArray(child.material)) {
-                            child.material.forEach(mat => {
-                                if (mat.color) {
-                                    mat.color.multiplyScalar(1.5); // Brighten by 50%
-                                }
-                                mat.needsUpdate = true;
-                            });
-                        } else {
-                            // Single material
-                            if (child.material.color) {
-                                child.material.color.multiplyScalar(1.5); // Brighten by 50%
-                            }
-                            child.material.needsUpdate = true;
+            updateHungerBehavior() {
+                if (this.isFeedingActive || this.isDead || this.isManualAnimationActive) return;
+                
+                this.moveSpeed = this.hungerLevel >= this.HUNGER_STAGES.HUNGRY ? 0.01 : 0.02;
+                
+                if (this.hungerLevel >= this.HUNGER_STAGES.HUNGRY && !this.isMoving) {
+                    const sadChance = (this.hungerLevel / 100) * 0.003;
+                    if (Math.random() < sadChance) {
+                        const hungryAnimation = this.actions['Sad'] || this.actions['Idle_B'];
+                        if (hungryAnimation) {
+                            this.playAnimationAuto(hungryAnimation.getClip().name);
                         }
                     }
                 }
-            });
-
-            // Debug: Log model info
-            console.log('Model loaded:', model);
-            console.log('Animations found:', gltf.animations.length);
-
-            // Get model bounds and scale appropriately
-            const box = new THREE.Box3().setFromObject(model);
-            const size = box.getSize(new THREE.Vector3());
-            const center = box.getCenter(new THREE.Vector3());
-
-            console.log('Model size:', size);
-            console.log('Model center:', center);
-
-            // Center the model horizontally but place it properly on the ground
-            model.position.x -= center.x;
-            model.position.z -= center.z;
-            // Set Y position so the bottom of the model touches the ground
-            model.position.y = -box.min.y - 0.6;
-
-            // Calculate camera distance based on model size
-            const maxDimension = Math.max(size.x, size.y, size.z);
-
-            // Much closer camera positioning - divide by 30 to get much closer (3x zoom)
-            const cameraDistance = maxDimension / 30; // 3x closer than before!
-
-            // Position camera to view the model properly AND see the skybox
-            camera.position.set(cameraDistance * 2, cameraDistance * 1, cameraDistance * 3);
-            camera.lookAt(0, 0, 0);
-
-            // Make sure the camera can see the skybox
-            camera.far = 15000; // Update far plane to see the skybox
-            camera.updateProjectionMatrix();
-
-            console.log('Model max dimension:', maxDimension);
-            console.log('Camera distance:', cameraDistance);
-
-            // Setup animations
-            if (gltf.animations && gltf.animations.length > 0) {
-                mixer = new THREE.AnimationMixer(model);
-                
-                const animationList = document.getElementById('animationList');
-                
-                gltf.animations.forEach((clip, index) => {
-                    const action = mixer.clipAction(clip);
-                    actions[clip.name] = action;
-                    
-                    // Create list item for each animation
-                    const li = document.createElement('li');
-                    li.textContent = clip.name;
-                    li.addEventListener('click', () => playAnimation(clip.name, li));
-                    animationList.appendChild(li);
-                });
-
-                console.log('Animation actions created:', Object.keys(actions));
-            } else {
-                console.log('No animations found in the model');
             }
-        }, (progress) => {
-            console.log('Loading progress:', progress);
-        }, (error) => {
-            console.error('Error loading GLTF model:', error);
-        });
 
-        // Add click event listener for the dog bowl only
-        function onMouseClick(event) {
-            // Convert mouse position to normalized device coordinates
-            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            
-            // Create raycaster from camera through mouse position
-            raycaster.setFromCamera(mouse, camera);
-            
-            // First check if we clicked on the dog bowl
-            const bowlIntersects = raycaster.intersectObject(dogBowl, true);
-            
-            if (bowlIntersects.length > 0 && !isQuestionActive) {
-                showFeedingQuestion();
-                return; // Don't move if we clicked the bowl
-            }
-            
-            // If not clicking on bowl, check for ground intersection for movement
-            // Create a ground plane for raycasting
-            const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.5); // Y=0.5 (ground level)
-            const intersectionPoint = new THREE.Vector3();
-            
-            // Calculate intersection with ground plane
-            if (raycaster.ray.intersectPlane(groundPlane, intersectionPoint)) {
-                // Check if the click point is within reasonable bounds
-                const maxDistance = moveRadius;
-                const clickDistance = Math.sqrt(intersectionPoint.x * intersectionPoint.x + intersectionPoint.z * intersectionPoint.z);
+            resetHunger() {
+                if (this.isDead) return;
                 
-                if (clickDistance <= maxDistance) {
-                    // Start movement to clicked position
-                    startMovementToPosition(intersectionPoint);
+                this.lastFeedTime = Date.now();
+                this.hungerLevel = 0;
+                this.updateHungerDisplay(0);
+                this.moveSpeed = 0.02;
+                
+                const hungerStatus = document.getElementById('hungerStatus');
+                const hungerFill = document.getElementById('hungerFill');
+                const feedButton = document.getElementById('feedButton');
+                
+                if (hungerStatus) {
+                    hungerStatus.textContent = 'Well Fed';
+                    hungerStatus.style.color = '#4CAF50';
+                }
+                if (hungerFill) {
+                    hungerFill.style.width = '0%';
+                    hungerFill.style.background = 'linear-gradient(90deg, #4CAF50, #8BC34A)';
+                }
+                if (feedButton) {
+                    feedButton.disabled = false;
+                    feedButton.style.background = '#4CAF50';
+                    feedButton.textContent = 'Feed Muskrat';
+                }
+            }
+
+            // Movement and animation
+            updateAnimationState() {
+                if (this.isFeedingActive || this.isManualAnimationActive) return;
+                
+                const currentTime = Date.now();
+                
+                if (!this.isMoving && currentTime > this.nextMoveTime) {
+                    this.startRandomMovement();
+                }
+                
+                if (this.isMoving) {
+                    this.updateMovement();
+                    if (currentTime - this.moveStartTime > this.moveDuration) {
+                        this.stopMovement();
+                    }
                 } else {
-                    // If too far, move in that direction but limit distance
-                    const direction = new THREE.Vector3(intersectionPoint.x, 0, intersectionPoint.z).normalize();
-                    const limitedTarget = direction.multiplyScalar(maxDistance);
-                    limitedTarget.y = 0;
-                    startMovementToPosition(limitedTarget);
-                }
-            }
-        }
-
-        // Remove updateAnimationState function - replace with enhanced version with movement
-        function updateAnimationState() {
-            // Don't change animations if feeding is active or manual animation is playing
-            if (isFeedingActive || isManualAnimationActive) {
-                return;
-            }
-            
-            const currentTime = Date.now();
-            
-            // Handle random movement
-            if (!isMoving && currentTime > nextMoveTime) {
-                // Start a random movement
-                startRandomMovement();
-            }
-            
-            if (isMoving) {
-                // Continue moving towards target
-                updateMovement();
-                
-                // Check if movement duration is over
-                if (currentTime - moveStartTime > moveDuration) {
-                    stopMovement();
-                }
-            } else {
-                // Auto-play idle animation if no manual animation is active
-                if (actions['Idle_A'] && currentAction !== actions['Idle_A']) {
-                    playAnimationAuto('Idle_A');
-                    idleStartTime = Date.now();
-                    shouldFaceScreen = false;
-                }
-                
-                // Check if we should start facing the screen
-                if (currentAction === actions['Idle_A']) {
-                    if (Date.now() - idleStartTime > idleFaceDelay && !shouldFaceScreen) {
-                        shouldFaceScreen = true;
+                    if (this.actions['Idle_A'] && this.currentAction !== this.actions['Idle_A']) {
+                        this.playAnimationAuto('Idle_A');
+                        this.idleStartTime = Date.now();
+                        this.shouldFaceScreen = false;
+                    }
+                    
+                    if (this.currentAction === this.actions['Idle_A']) {
+                        if (Date.now() - this.idleStartTime > this.idleFaceDelay && !this.shouldFaceScreen) {
+                            this.shouldFaceScreen = true;
+                        }
                     }
                 }
             }
-        }
 
-        // Add new movement functions
-        function startRandomMovement() {
-            if (!model) return;
-            
-            // Generate random target position within radius
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * moveRadius;
-            
-            moveTarget.set(
-                Math.cos(angle) * distance,
-                model.position.y, // Keep same Y position
-                Math.sin(angle) * distance
-            );
-            
-            // Set movement parameters
-            isMoving = true;
-            moveStartTime = Date.now();
-            moveDuration = 2000 + Math.random() * 3000; // 2-5 seconds of movement
-            
-            // Schedule next movement (5-15 seconds after this one ends)
-            nextMoveTime = moveStartTime + moveDuration + 5000 + Math.random() * 10000;
-            
-            // Start walking animation if available
-            const walkAction = actions['Walk'] || actions['Walking'] || actions['Run'] || actions['Running'];
-            if (walkAction && currentAction !== walkAction) {
-                playAnimationAuto(walkAction.getClip().name);
-            }
-            
-            // Face movement direction
-            shouldFaceScreen = false;
-            
-            console.log('Starting movement to:', moveTarget);
-        }
-
-        function updateMovement() {
-            if (!model || !isMoving) return;
-            
-            // Calculate direction to target
-            const direction = new THREE.Vector3();
-            direction.subVectors(moveTarget, model.position);
-            direction.y = 0; // Keep movement on ground plane
-            
-            const distance = direction.length();
-            
-            if (distance > 0.1) {
-                // Normalize direction and apply speed
-                direction.normalize();
+            startRandomMovement() {
+                if (!this.model) return;
                 
-                // Move towards target
-                model.position.add(direction.multiplyScalar(moveSpeed));
+                const angle = Math.random() * Math.PI * 2;
+                const distance = Math.random() * this.moveRadius;
                 
-                // Move the creature light with the model
-                creatureLight.position.set(
-                    model.position.x,
-                    model.position.y + 3,
-                    model.position.z
+                this.moveTarget.set(
+                    Math.cos(angle) * distance,
+                    this.model.position.y,
+                    Math.sin(angle) * distance
                 );
                 
-                // Rotate to face movement direction
-                const targetRotation = Math.atan2(direction.x, direction.z);
-                model.rotation.y = targetRotation;
-            } else {
-                // Reached target
-                stopMovement();
-            }
-        }
-
-        function stopMovement() {
-            isMoving = false;
-            
-            // Return to idle animation
-            if (actions['Idle_A'] && currentAction !== actions['Idle_A']) {
-                playAnimationAuto('Idle_A');
-                idleStartTime = Date.now();
-                shouldFaceScreen = false;
-            }
-            
-            console.log('Movement stopped');
-        }
-
-        // Add new function to start movement to a specific position
-        function startMovementToPosition(targetPosition) {
-            if (!model) return;
-            
-            // Stop any current random movement
-            isMoving = false;
-            
-            // Set new target
-            moveTarget.copy(targetPosition);
-            moveTarget.y = model.position.y; // Keep same Y position
-            
-            // Calculate distance to determine movement duration
-            const distance = model.position.distanceTo(moveTarget);
-            
-            // Set movement parameters
-            isMoving = true;
-            moveStartTime = Date.now();
-            moveDuration = (distance / moveSpeed) * 50; // Adjust duration based on distance
-            
-            // Schedule next random movement for later (give user control for a while)
-            nextMoveTime = moveStartTime + moveDuration + 8000; // 8 seconds after movement ends
-            
-            // Start walking animation if available
-            const walkAction = actions['Walk'] || actions['Walking'] || actions['Run'] || actions['Running'];
-            if (walkAction && currentAction !== walkAction) {
-                playAnimationAuto(walkAction.getClip().name);
-            }
-            
-            // Face movement direction immediately
-            if (distance > 0.1) {
-                const direction = new THREE.Vector3();
-                direction.subVectors(moveTarget, model.position);
-                direction.y = 0;
-                direction.normalize();
+                this.isMoving = true;
+                this.moveStartTime = Date.now();
+                this.moveDuration = 2000 + Math.random() * 3000;
+                this.nextMoveTime = this.moveStartTime + this.moveDuration + 5000 + Math.random() * 10000;
                 
-                const targetRotation = Math.atan2(direction.x, direction.z);
-                model.rotation.y = targetRotation;
-            }
-            
-            shouldFaceScreen = false;
-            
-            console.log('Starting movement to clicked position:', moveTarget);
-        }
-
-        // Remove updateModelRotation function - replace with enhanced version
-        function updateModelRotation() {
-            if (model && shouldFaceScreen && !isMoving) {
-                // Smoothly rotate to face the screen (rotation y = 0)
-                const currentRotation = model.rotation.y;
-                const rotationDiff = -currentRotation; // Target is 0
-                
-                // Apply smooth rotation
-                const rotSpeed = 0.02; // Slow rotation speed
-                if (Math.abs(rotationDiff) > rotSpeed) {
-                    model.rotation.y += Math.sign(rotationDiff) * rotSpeed;
-                } else {
-                    model.rotation.y = 0; // Snap to exact position when close enough
+                const walkAction = this.actions['Walk'] || this.actions['Walking'] || this.actions['Run'] || this.actions['Running'];
+                if (walkAction && this.currentAction !== walkAction) {
+                    this.playAnimationAuto(walkAction.getClip().name);
                 }
-            }
-        }
-
-        // Automatic animation function (doesn't update UI)
-        function playAnimationAuto(animationName) {
-            if (currentAction && actions[animationName]) {
-                currentAction.fadeOut(0.2);
-            }
-            
-            currentAction = actions[animationName];
-            if (currentAction) {
-                currentAction.reset().fadeIn(0.2).play();
-            }
-        }
-
-        // Animation control functions (manual control from UI)
-        function playAnimation(animationName, listItem) {
-            // Set manual animation flag to prevent auto-animations from overriding
-            isManualAnimationActive = true;
-            
-            // Stop any current movement when manually controlling animations
-            if (isMoving) {
-                stopMovement();
-            }
-            
-            if (currentAction) {
-                currentAction.fadeOut(0.3);
-            }
-            
-            currentAction = actions[animationName];
-            if (currentAction) {
-                currentAction.reset().fadeIn(0.3).play();
                 
-                // Update UI
-                document.querySelectorAll('#animationList li').forEach(li => li.classList.remove('active'));
-                listItem.classList.add('active');
-                
-                // Reset manual animation flag after the animation duration + fade time
-                // Get animation duration and set timeout accordingly
-                const animationDuration = currentAction.getClip().duration;
-                setTimeout(() => {
-                    isManualAnimationActive = false;
-                }, (animationDuration + 0.3) * 1000); // Convert to milliseconds and add fade time
+                this.shouldFaceScreen = false;
             }
-        }
 
-        // Control buttons
-        document.getElementById('playPause').addEventListener('click', () => {
-            if (currentAction) {
-                if (currentAction.paused) {
-                    currentAction.paused = false;
-                    document.getElementById('playPause').textContent = 'Pause';
-                } else {
-                    currentAction.paused = true;
-                    document.getElementById('playPause').textContent = 'Play';
-                }
-            }
-        });
-
-        document.getElementById('stop').addEventListener('click', () => {
-            if (currentAction) {
-                currentAction.stop();
-                document.getElementById('playPause').textContent = 'Play';
-                document.querySelectorAll('#animationList li').forEach(li => li.classList.remove('active'));
+            updateMovement() {
+                if (!this.model || !this.isMoving) return;
                 
-                // Reset manual animation flag when stopping
-                isManualAnimationActive = false;
-            }
-        });
-
-        // Replace the makeEatAtBowl function with this corrected version
-        function makeEatAtBowl() {
-            if (!model || isDead || !dogBowl) return;
-            
-            console.log('Making muskrat go to bowl to eat');
-            
-            // Calculate position near the bowl (closer to the bowl)
-            const bowlPosition = dogBowl.position.clone();
-            const eatPosition = new THREE.Vector3(
-                bowlPosition.x + 0.5, // Closer to the bowl
-                bowlPosition.y,
-                bowlPosition.z + 0.5
-            );
-            
-            // Stop any current movement/animation
-            isMoving = false;
-            isManualAnimationActive = true; // Prevent other animations
-            
-            // Move to bowl position
-            moveTarget.copy(eatPosition);
-            isMoving = true;
-            moveStartTime = Date.now();
-            moveDuration = 3000; // 3 seconds to reach bowl
-            
-            // Start walking animation
-            const walkAction = actions['Walk'] || actions['Walking'] || actions['Run'] || actions['Running'];
-            if (walkAction) {
-                playAnimationAuto(walkAction.getClip().name);
-            }
-            
-            // Animate movement to bowl
-            function moveToBowl() {
-                if (!isMoving) return;
-                
-                // Calculate direction to eating position
                 const direction = new THREE.Vector3();
-                direction.subVectors(moveTarget, model.position);
+                direction.subVectors(this.moveTarget, this.model.position);
                 direction.y = 0;
                 
                 const distance = direction.length();
                 
-                if (distance > 0.3) {
-                    // Still moving to bowl
+                if (distance > 0.1) {
                     direction.normalize();
-                    model.position.add(direction.multiplyScalar(moveSpeed * 1.5)); // Move faster to food
+                    this.model.position.add(direction.multiplyScalar(this.moveSpeed));
                     
-                    // Face movement direction
-                    const rotationToTarget = Math.atan2(direction.x, direction.z);
-                    model.rotation.y = rotationToTarget;
+                    this.creatureLight.position.set(
+                        this.model.position.x,
+                        this.model.position.y + 3,
+                        this.model.position.z
+                    );
                     
-                    requestAnimationFrame(moveToBowl);
+                    const targetRotation = Math.atan2(direction.x, direction.z);
+                    this.model.rotation.y = targetRotation;
                 } else {
-                    // Reached bowl - start eating
-                    console.log('Muskrat reached bowl, starting to eat');
-                    startEatingAtBowl();
+                    this.stopMovement();
                 }
             }
-            
-            moveToBowl();
-        }
-        function startEatingAtBowl() {
-            isMoving = false;
-            
-            console.log('Muskrat is now eating at the bowl');
-            
-            // Face the bowl directly (more precisely)
-            const bowlPosition = dogBowl.position.clone();
-            const directionToBowl = new THREE.Vector3();
-            directionToBowl.subVectors(bowlPosition, model.position);
-            directionToBowl.y = 0;
-            directionToBowl.normalize();
-            
-            // Calculate proper rotation to face the bowl
-            const targetRotation = Math.atan2(directionToBowl.x, directionToBowl.z);
-            
-            // Smoothly rotate to face the bowl
-            function faceTheBowl() {
-                const currentRotation = model.rotation.y;
-                const rotationDiff = targetRotation - currentRotation;
+
+            stopMovement() {
+                this.isMoving = false;
                 
-                // Normalize rotation difference to [-π, π]
-                let normalizedDiff = ((rotationDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
+                if (this.actions['Idle_A'] && this.currentAction !== this.actions['Idle_A']) {
+                    this.playAnimationAuto('Idle_A');
+                    this.idleStartTime = Date.now();
+                    this.shouldFaceScreen = false;
+                }
+            }
+
+            startMovementToPosition(targetPosition) {
+                if (!this.model) return;
                 
-                const rotSpeed = 0.1; // Rotation speed
-                if (Math.abs(normalizedDiff) > 0.05) {
-                    model.rotation.y += Math.sign(normalizedDiff) * rotSpeed;
-                    requestAnimationFrame(faceTheBowl);
-                } else {
-                    model.rotation.y = targetRotation; // Snap to exact rotation
-                    console.log('Muskrat is now facing the bowl');
+                this.isMoving = false;
+                this.moveTarget.copy(targetPosition);
+                this.moveTarget.y = this.model.position.y;
+                
+                const distance = this.model.position.distanceTo(this.moveTarget);
+                
+                this.isMoving = true;
+                this.moveStartTime = Date.now();
+                this.moveDuration = (distance / this.moveSpeed) * 50;
+                this.nextMoveTime = this.moveStartTime + this.moveDuration + 8000;
+                
+                const walkAction = this.actions['Walk'] || this.actions['Walking'] || this.actions['Run'] || this.actions['Running'];
+                if (walkAction && this.currentAction !== walkAction) {
+                    this.playAnimationAuto(walkAction.getClip().name);
+                }
+                
+                if (distance > 0.1) {
+                    const direction = new THREE.Vector3();
+                    direction.subVectors(this.moveTarget, this.model.position);
+                    direction.y = 0;
+                    direction.normalize();
                     
-                    // Start eating animation
-                    const eatAction = actions['Eat'] || actions['Eating'] || actions['Idle_B'] || actions['Idle_A'];
-                    if (eatAction) {
-                        playAnimationAuto(eatAction.getClip().name);
+                    const targetRotation = Math.atan2(direction.x, direction.z);
+                    this.model.rotation.y = targetRotation;
+                }
+                
+                this.shouldFaceScreen = false;
+            }
+
+            updateModelRotation() {
+                if (this.model && this.shouldFaceScreen && !this.isMoving) {
+                    const currentRotation = this.model.rotation.y;
+                    const rotationDiff = -currentRotation;
+                    const rotSpeed = 0.02;
+                    
+                    if (Math.abs(rotationDiff) > rotSpeed) {
+                        this.model.rotation.y += Math.sign(rotationDiff) * rotSpeed;
+                    } else {
+                        this.model.rotation.y = 0;
                     }
                 }
             }
-            
-            faceTheBowl();
-            
-            // After eating, return to normal behavior
-            setTimeout(() => {
-                isManualAnimationActive = false; // Reset so normal movement can resume
-                nextMoveTime = Date.now() + 3000; // Resume random movement after 3 seconds
-                
-                // Play a happy animation if available
-                const happyAction = actions['Happy'] || actions['Joy'] || actions['Idle_A'];
-                if (happyAction) {
-                    playAnimationAuto(happyAction.getClip().name);
+
+            playAnimationAuto(animationName) {
+                if (this.currentAction && this.actions[animationName]) {
+                    this.currentAction.fadeOut(0.2);
                 }
                 
-                console.log('Muskrat finished eating, resuming normal behavior');
-            }, 4000); // Eat for 4 seconds
+                this.currentAction = this.actions[animationName];
+                if (this.currentAction) {
+                    this.currentAction.reset().fadeIn(0.2).play();
+                }
+            }
+
+            playAnimation(animationName, listItem) {
+                this.isManualAnimationActive = true;
+                
+                if (this.isMoving) {
+                    this.stopMovement();
+                }
+                
+                if (this.currentAction) {
+                    this.currentAction.fadeOut(0.3);
+                }
+                
+                this.currentAction = this.actions[animationName];
+                if (this.currentAction) {
+                    this.currentAction.reset().fadeIn(0.3).play();
+                    
+                    document.querySelectorAll('#animationList li').forEach(li => li.classList.remove('active'));
+                    listItem.classList.add('active');
+                    
+                    const animationDuration = this.currentAction.getClip().duration;
+                    setTimeout(() => {
+                        this.isManualAnimationActive = false;
+                    }, (animationDuration + 0.3) * 1000);
+                }
+            }
+
+            makeEatAtBowl() {
+                if (!this.model || this.isDead || !this.dogBowl) return;
+                
+                const bowlPosition = this.dogBowl.position.clone();
+                const eatPosition = new THREE.Vector3(
+                    bowlPosition.x + 0.5,
+                    bowlPosition.y,
+                    bowlPosition.z + 0.5
+                );
+                
+                this.isMoving = false;
+                this.isManualAnimationActive = true;
+                this.moveTarget.copy(eatPosition);
+                this.isMoving = true;
+                this.moveStartTime = Date.now();
+                this.moveDuration = 3000;
+                
+                const walkAction = this.actions['Walk'] || this.actions['Walking'] || this.actions['Run'] || this.actions['Running'];
+                if (walkAction) {
+                    this.playAnimationAuto(walkAction.getClip().name);
+                }
+                
+                const moveToBowl = () => {
+                    if (!this.isMoving) return;
+                    
+                    const direction = new THREE.Vector3();
+                    direction.subVectors(this.moveTarget, this.model.position);
+                    direction.y = 0;
+                    
+                    const distance = direction.length();
+                    
+                    if (distance > 0.3) {
+                        direction.normalize();
+                        this.model.position.add(direction.multiplyScalar(this.moveSpeed * 1.5));
+                        
+                        const rotationToTarget = Math.atan2(direction.x, direction.z);
+                        this.model.rotation.y = rotationToTarget;
+                        
+                        requestAnimationFrame(moveToBowl);
+                    } else {
+                        this.startEatingAtBowl();
+                    }
+                };
+                
+                moveToBowl();
+            }
+
+            startEatingAtBowl() {
+                this.isMoving = false;
+                
+                const bowlPosition = this.dogBowl.position.clone();
+                const directionToBowl = new THREE.Vector3();
+                directionToBowl.subVectors(bowlPosition, this.model.position);
+                directionToBowl.y = 0;
+                directionToBowl.normalize();
+                
+                const targetRotation = Math.atan2(directionToBowl.x, directionToBowl.z);
+                
+                const faceTheBowl = () => {
+                    const currentRotation = this.model.rotation.y;
+                    const rotationDiff = targetRotation - currentRotation;
+                    let normalizedDiff = ((rotationDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
+                    
+                    const rotSpeed = 0.1;
+                    if (Math.abs(normalizedDiff) > 0.05) {
+                        this.model.rotation.y += Math.sign(normalizedDiff) * rotSpeed;
+                        requestAnimationFrame(faceTheBowl);
+                    } else {
+                        this.model.rotation.y = targetRotation;
+                        
+                        const eatAction = this.actions['Eat'] || this.actions['Eating'] || this.actions['Idle_B'] || this.actions['Idle_A'];
+                        if (eatAction) {
+                            this.playAnimationAuto(eatAction.getClip().name);
+                        }
+                    }
+                };
+                
+                faceTheBowl();
+                
+                setTimeout(() => {
+                    this.isManualAnimationActive = false;
+                    this.nextMoveTime = Date.now() + 3000;
+                    
+                    const happyAction = this.actions['Happy'] || this.actions['Joy'] || this.actions['Idle_A'];
+                    if (happyAction) {
+                        this.playAnimationAuto(happyAction.getClip().name);
+                    }
+                }, 4000);
+            }
+
+            // Event handlers
+            setupEventListeners() {
+                // Control buttons
+                document.getElementById('playPause').addEventListener('click', () => {
+                    if (this.currentAction) {
+                        if (this.currentAction.paused) {
+                            this.currentAction.paused = false;
+                            document.getElementById('playPause').textContent = 'Pause';
+                        } else {
+                            this.currentAction.paused = true;
+                            document.getElementById('playPause').textContent = 'Play';
+                        }
+                    }
+                });
+
+                document.getElementById('stop').addEventListener('click', () => {
+                    if (this.currentAction) {
+                        this.currentAction.stop();
+                        document.getElementById('playPause').textContent = 'Play';
+                        document.querySelectorAll('#animationList li').forEach(li => li.classList.remove('active'));
+                        this.isManualAnimationActive = false;
+                    }
+                });
+
+                // Animal selector
+                document.querySelectorAll('.animal-button').forEach(button => {
+                    button.addEventListener('click', () => {
+                        const selectedAnimal = button.getAttribute('data-animal');
+                        this.loadAnimalModel(selectedAnimal);
+                        
+                        document.querySelectorAll('.animal-button').forEach(btn => btn.classList.remove('active'));
+                        button.classList.add('active');
+                    });
+                });
+
+                // Click interaction
+                window.addEventListener('click', (event) => this.onMouseClick(event));
+                
+                // Window resize
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+            }
+
+// ...existing code...
+            loadAnimalModel(animal) {
+                if (this.model) {
+                    this.scene.remove(this.model);
+                    this.model = null;
+                }
+                
+                // Clear current animations
+                if (this.mixer) {
+                    this.mixer.stopAllAction();
+                    this.mixer = null;
+                }
+                this.actions = {};
+                this.currentAction = null;
+                
+                // Clear animation list UI
+                const animationList = document.getElementById('animationList');
+                animationList.innerHTML = '';
+                
+                // Update current animal
+                this.currentAnimal = animal;
+                
+                const loader = new GLTFLoader();
+                // Use the correct path format based on your animalPaths object
+                const modelPath = this.animalPaths[animal];
+                
+                loader.load(modelPath, (gltf) => {
+                    this.model = gltf.scene;
+                    this.scene.add(this.model);
+                    this.setupModelProperties(gltf);
+                    this.setupAnimations(gltf);
+                    this.positionCamera();
+                    
+                    // Reset animation states
+                    this.isManualAnimationActive = false;
+                    this.isMoving = false;
+                    this.shouldFaceScreen = false;
+                    
+                    // Update feed button text
+                    const feedButton = document.getElementById('feedButton');
+                    if (feedButton) {
+                        const animalName = animal.charAt(0).toUpperCase() + animal.slice(1);
+                        feedButton.textContent = `Feed ${animalName}`;
+                    }
+                    
+                    // Update question modal title
+                    const questionBox = document.querySelector('#questionBox h3');
+                    if (questionBox) {
+                        const animalName = animal.charAt(0).toUpperCase() + animal.slice(1);
+                        questionBox.textContent = `Feed your ${animalName}!`;
+                    }
+                }, undefined, (error) => {
+                    console.error('Error loading model:', error);
+                    console.log('Attempted to load:', modelPath);
+                });
+            }
+// ...existing code...
+
+            onMouseClick(event) {
+                this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+                this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+                
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                
+                // Check bowl click
+                const bowlIntersects = this.raycaster.intersectObject(this.dogBowl, true);
+                if (bowlIntersects.length > 0 && !this.isQuestionActive) {
+                    this.showFeedingQuestion();
+                    return;
+                }
+                
+                // Ground click for movement
+                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.5);
+                const intersectionPoint = new THREE.Vector3();
+                
+                if (this.raycaster.ray.intersectPlane(groundPlane, intersectionPoint)) {
+                    const clickDistance = Math.sqrt(intersectionPoint.x * intersectionPoint.x + intersectionPoint.z * intersectionPoint.z);
+                    
+                    if (clickDistance <= this.moveRadius) {
+                        this.startMovementToPosition(intersectionPoint);
+                    } else {
+                        const direction = new THREE.Vector3(intersectionPoint.x, 0, intersectionPoint.z).normalize();
+                        const limitedTarget = direction.multiplyScalar(this.moveRadius);
+                        limitedTarget.y = 0;
+                        this.startMovementToPosition(limitedTarget);
+                    }
+                }
+            }
+
+            // Main animation loop
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                const delta = this.clock.getDelta();
+                if (this.mixer) this.mixer.update(delta);
+                
+                this.updateAnimationState();
+                this.updateModelRotation();
+                
+                this.renderer.render(this.scene, this.camera);
+            }
         }
 
-        // Render loop
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            const delta = clock.getDelta();
-            if (mixer) mixer.update(delta);
-            
-            // Update animation state
-            updateAnimationState();
-            
-            // Update model rotation for screen facing
-            updateModelRotation();
-            
-            renderer.render(scene, camera);
-        }
-
-        // Handle window resize
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        // Remove mouse move listener, keep only click listener for dog bowl interaction
-        window.addEventListener('click', onMouseClick);
-
-        // Also need to call createBeautifulGround(), loadDogBowl(), and createHungerBar()
-        // Add these function calls after the scene setup:
-        createBeautifulGround();
-        loadDogBowl();
-        createHungerBar();
-
-        // Start hunger timer
-        hungerTimer = setInterval(updateHungerSystem, 1000); // Update every second
-
-        animate();
+        // Initialize the application
+        new HolbigotchiApp();
     </script>
 </body>
 </html>
