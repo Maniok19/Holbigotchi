@@ -322,16 +322,11 @@
 
         // Add a simple ground plane to help visualize
         function createBeautifulGround() {
-            // Create a larger, more detailed ground
+            // Create a larger, flat ground (removed height variation)
             const groundGeometry = new THREE.PlaneGeometry(200, 200, 50, 50);
             
-            // Add some height variation for terrain
-            const vertices = groundGeometry.attributes.position.array;
-            for (let i = 0; i < vertices.length; i += 3) {
-                vertices[i + 2] = Math.random() * 0.5 - 0.25; // Random height variation
-            }
-            groundGeometry.attributes.position.needsUpdate = true;
-            groundGeometry.computeVertexNormals();
+            // Remove the height variation code - keep ground completely flat
+            // The vertices will remain at their default positions (flat plane)
             
             // Create a grass-like material
             const groundMaterial = new THREE.MeshLambertMaterial({ 
