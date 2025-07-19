@@ -185,7 +185,21 @@
                 this.isFeedingActive = false;
                 this.currentQuestion = null;
                 this.feedingQuestions = [
-                    { question: "1+2", answers: ["2", "3", "4", "999"], correct: 1 }
+                    // Basic questions
+                    { question: "HTML – Quelle balise est utilisée pour insérer une image ?", answers: ["<img>", "<image>", "<pic>", "999"], correct: 0 },
+                    { question: "CSS – Que fait color: red; ?", answers: ["Change la couleur de fond en rouge", "Change la couleur du texte en rouge", "Change la couleur de la bordure en rouge"], correct: 1 },
+                    { question: "JavaScript – Que renvoie typeof null ?", answers: ["\"null\"", "\"object\"", "\"undefined\""], correct: 1 },
+                    
+                    // Intermediate questions
+                    { question: "JavaScript (DOM) – Comment sélectionne-t-on un élément par son ID ?", answers: ["document.querySelectorAll(\"#id\")", "document.getElementByClassName(\"id\")", "document.getElementById(\"id\")"], correct: 2 },
+                    { question: "Python (Flask) – À quoi sert render_template() dans Flask ?", answers: ["À exécuter une requête SQL", "À rendre un template HTML avec des données", "À générer automatiquement un formulaire"], correct: 1 },
+                    { question: "SQL – Quel mot-clé SQL permet de supprimer une table ?", answers: ["REMOVE TABLE", "DELETE TABLE", "DROP TABLE"], correct: 2 },
+                    
+                    // Expert questions
+                    { question: "JavaScript avancé – Quelle est la sortie de ce code ?\nlet x = [1, 2, 3];\nconsole.log(typeof x);", answers: ["\"object\"", "\"array\"", "\"list\""], correct: 0 },
+                    { question: "React – Quel hook est utilisé pour gérer un état local ?", answers: ["useState()", "useEffect()", "useContext()"], correct: 0 },
+                    { question: "API REST – Quel code HTTP signifie \"Créé avec succès\" ?", answers: ["201", "204", "400"], correct: 0 },
+                    { question: "PostgreSQL – Quelle clause permet de regrouper les résultats ?", answers: ["GROUP BY", "MERGE INTO", "COLLATE BY"], correct: 0 }
                 ];
 
                 // Movement system
@@ -1163,30 +1177,44 @@ resetHunger() {
                 }
             }
 
-            playAnimation(animationName, listItem) {
-                this.isManualAnimationActive = true;
-                
-                if (this.isMoving) {
-                    this.stopMovement();
-                }
-                
-                if (this.currentAction) {
-                    this.currentAction.fadeOut(0.3);
-                }
-                
-                this.currentAction = this.actions[animationName];
-                if (this.currentAction) {
-                    this.currentAction.reset().fadeIn(0.3).play();
-                    
-                    document.querySelectorAll('#animationList li').forEach(li => li.classList.remove('active'));
-                    listItem.classList.add('active');
-                    
-                    const animationDuration = this.currentAction.getClip().duration;
-                    setTimeout(() => {
-                        this.isManualAnimationActive = false;
-                    }, (animationDuration + 0.3) * 1000);
-                }
+        playAnimation(animationName, listItem) {
+            this.isManualAnimationActive = true;
+            
+            if (this.isMoving) {
+                this.stopMovement();
             }
+            
+            if (this.currentAction) {
+                this.currentAction.fadeOut(0.3);
+            }
+            
+            this.currentAction = this.actions[animationName];
+            if (this.currentAction) {
+                this.currentAction.reset().fadeIn(0.3).play();
+                
+                document.querySelectorAll('#animationList li').forEach(li => li.classList.remove('active'));
+                listItem.classList.add('active');
+                
+                // Get the animation duration and add extra time for fade transitions
+                const animationDuration = this.currentAction.getClip().duration;
+                const totalTime = (animationDuration + 0.6) * 1000; // Add 0.6s for fade in/out
+                
+                // Disable the loop mode to ensure animation plays only once
+                this.currentAction.setLoop(THREE.LoopOnce);
+                this.currentAction.clampWhenFinished = true;
+                
+                // Set a timeout to re-enable automatic behavior after animation completes
+                setTimeout(() => {
+                    this.isManualAnimationActive = false;
+                    // Reset to idle animation
+                    if (this.actions['Idle_A']) {
+                        this.playAnimationAuto('Idle_A');
+                    }
+                    // Clear the active state from UI
+                    listItem.classList.remove('active');
+                }, totalTime);
+            }
+        }
 
             makeEatAtBowl() {
                 if (!this.model || this.isDead || !this.dogBowl) return;
