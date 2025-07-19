@@ -710,16 +710,16 @@
                 const targetRadius = Math.random() * 0.25; // Keep within bowl radius
                 const targetAngle = Math.random() * Math.PI * 2;
                 const layerHeight = Math.floor(i / 15) * 0.05; // Create 3-4 layers of food
-                
+
                 food.userData = {
                     targetX: Math.cos(targetAngle) * targetRadius,
                     targetY: -0.35 + layerHeight, // Stack food in layers
                     targetZ: Math.sin(targetAngle) * targetRadius,
-                    fallSpeed: 0.015 + Math.random() * 0.02, // Slightly varied fall speeds
+                    fallSpeed: 0.03 + Math.random() * 0.04, // Increased from 0.015-0.035 to 0.03-0.07 (2x faster)
                     rotationSpeed: {
-                        x: (Math.random() - 0.5) * 0.2,
-                        y: (Math.random() - 0.5) * 0.2,
-                        z: (Math.random() - 0.5) * 0.2
+                        x: (Math.random() - 0.5) * 0.3, // Also increased rotation speed slightly
+                        y: (Math.random() - 0.5) * 0.3,
+                        z: (Math.random() - 0.5) * 0.3
                     }
                 };
                 
@@ -900,22 +900,21 @@
             document.getElementById('questionModal').style.display = 'flex';
         }
 
-        // Update the checkAnswer function to reset hunger on correct answer
+        // Update the checkAnswer function to make the muskrat go to the bowl when fed correctly
         function checkAnswer(selectedIndex) {
             const feedbackElement = document.getElementById('feedbackMessage');
             const closeButton = document.getElementById('closeModal');
             
             if (selectedIndex === currentQuestion.correct) {
-                feedbackElement.innerHTML = '<span class="correct">Correct! Your muskrat is well fed and happy!</span>';
+                feedbackElement.innerHTML = '<span class="correct">Correct! Your muskrat is going to eat!</span>';
                 
                 // Reset hunger when successfully fed
                 resetHunger();
                 
-                // Play eating animation if available
-                if (actions['Eat'] || actions['Eating']) {
-                    const eatAction = actions['Eat'] || actions['Eating'];
-                    playAnimationAuto(eatAction.getClip().name);
-                }
+                // Make the muskrat go to the bowl to eat
+                setTimeout(() => {
+                    makeEatAtBowl();
+                }, 1000); // Wait 1 second before muskrat starts moving
 
                 // Trigger food fall effect
                 createFoodFallEffect();
@@ -1499,6 +1498,124 @@
                 isManualAnimationActive = false;
             }
         });
+
+        // Replace the makeEatAtBowl function with this corrected version
+        function makeEatAtBowl() {
+            if (!model || isDead || !dogBowl) return;
+            
+            console.log('Making muskrat go to bowl to eat');
+            
+            // Calculate position near the bowl (closer to the bowl)
+            const bowlPosition = dogBowl.position.clone();
+            const eatPosition = new THREE.Vector3(
+                bowlPosition.x + 0.5, // Closer to the bowl
+                bowlPosition.y,
+                bowlPosition.z + 0.5
+            );
+            
+            // Stop any current movement/animation
+            isMoving = false;
+            isManualAnimationActive = true; // Prevent other animations
+            
+            // Move to bowl position
+            moveTarget.copy(eatPosition);
+            isMoving = true;
+            moveStartTime = Date.now();
+            moveDuration = 3000; // 3 seconds to reach bowl
+            
+            // Start walking animation
+            const walkAction = actions['Walk'] || actions['Walking'] || actions['Run'] || actions['Running'];
+            if (walkAction) {
+                playAnimationAuto(walkAction.getClip().name);
+            }
+            
+            // Animate movement to bowl
+            function moveToBowl() {
+                if (!isMoving) return;
+                
+                // Calculate direction to eating position
+                const direction = new THREE.Vector3();
+                direction.subVectors(moveTarget, model.position);
+                direction.y = 0;
+                
+                const distance = direction.length();
+                
+                if (distance > 0.3) {
+                    // Still moving to bowl
+                    direction.normalize();
+                    model.position.add(direction.multiplyScalar(moveSpeed * 1.5)); // Move faster to food
+                    
+                    // Face movement direction
+                    const rotationToTarget = Math.atan2(direction.x, direction.z);
+                    model.rotation.y = rotationToTarget;
+                    
+                    requestAnimationFrame(moveToBowl);
+                } else {
+                    // Reached bowl - start eating
+                    console.log('Muskrat reached bowl, starting to eat');
+                    startEatingAtBowl();
+                }
+            }
+            
+            moveToBowl();
+        }
+
+        // Fix the eating function to properly face the bowl and handle food disappearing
+        function startEatingAtBowl() {
+            isMoving = false;
+            
+            console.log('Muskrat is now eating at the bowl');
+            
+            // Face the bowl directly (more precisely)
+            const bowlPosition = dogBowl.position.clone();
+            const directionToBowl = new THREE.Vector3();
+            directionToBowl.subVectors(bowlPosition, model.position);
+            directionToBowl.y = 0;
+            directionToBowl.normalize();
+            
+            // Calculate proper rotation to face the bowl
+            const targetRotation = Math.atan2(directionToBowl.x, directionToBowl.z);
+            
+            // Smoothly rotate to face the bowl
+            function faceTheBowl() {
+                const currentRotation = model.rotation.y;
+                const rotationDiff = targetRotation - currentRotation;
+                
+                // Normalize rotation difference to [-π, π]
+                let normalizedDiff = ((rotationDiff + Math.PI) % (2 * Math.PI)) - Math.PI;
+                
+                const rotSpeed = 0.1; // Rotation speed
+                if (Math.abs(normalizedDiff) > 0.05) {
+                    model.rotation.y += Math.sign(normalizedDiff) * rotSpeed;
+                    requestAnimationFrame(faceTheBowl);
+                } else {
+                    model.rotation.y = targetRotation; // Snap to exact rotation
+                    console.log('Muskrat is now facing the bowl');
+                    
+                    // Start eating animation
+                    const eatAction = actions['Eat'] || actions['Eating'] || actions['Idle_B'] || actions['Idle_A'];
+                    if (eatAction) {
+                        playAnimationAuto(eatAction.getClip().name);
+                    }
+                }
+            }
+            
+            faceTheBowl();
+            
+            // After eating, return to normal behavior
+            setTimeout(() => {
+                isManualAnimationActive = false; // Reset so normal movement can resume
+                nextMoveTime = Date.now() + 3000; // Resume random movement after 3 seconds
+                
+                // Play a happy animation if available
+                const happyAction = actions['Happy'] || actions['Joy'] || actions['Idle_A'];
+                if (happyAction) {
+                    playAnimationAuto(happyAction.getClip().name);
+                }
+                
+                console.log('Muskrat finished eating, resuming normal behavior');
+            }, 4000); // Eat for 4 seconds
+        }
 
         // Render loop
         function animate() {
