@@ -810,7 +810,7 @@
                 dogBowl = gltf.scene;
                 
                 // Position the bowl in the center of the scene
-                dogBowl.position.set(0, -0.5, 0);
+                dogBowl.position.set(0, -0.57, 0);
                 dogBowl.name = 'dogBowl'; // Name it for raycasting
                 
                 // Scale the bowl if needed (adjust as necessary)
@@ -1216,7 +1216,7 @@ function checkAnswer(selectedIndex) {
             model.position.x -= center.x;
             model.position.z -= center.z;
             // Set Y position so the bottom of the model touches the ground
-            model.position.y = -box.min.y - 0.5;
+            model.position.y = -box.min.y - 0.6;
 
             // Calculate camera distance based on model size
             const maxDimension = Math.max(size.x, size.y, size.z);
