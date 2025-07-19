@@ -857,6 +857,17 @@
             // Hunger system
             initializeHungerSystem() {
                 this.createHungerBar();
+                
+                // Set initial hunger level to make creature almost starving (around 60-70%)
+                const initialHungerLevel = 60 + Math.random() * 10; // Between 60-70%
+                const timeToReachThisHunger = initialHungerLevel / this.HUNGER_INCREASE_RATE;
+                this.lastFeedTime = Date.now() - (timeToReachThisHunger * 1000);
+                this.hungerLevel = initialHungerLevel;
+                
+                // Update display immediately
+                this.updateHungerDisplay(timeToReachThisHunger);
+                this.updateHungerBehavior();
+                
                 this.hungerTimer = setInterval(() => this.updateHungerSystem(), 1000);
             }
 
