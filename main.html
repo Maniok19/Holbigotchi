@@ -284,11 +284,11 @@
         document.getElementById('container').appendChild(renderer.domElement);
 
         // Lighting
-        const ambientLight = new THREE.AmbientLight(0x404040, 0.6); // Reduced ambient
+        const ambientLight = new THREE.AmbientLight(0x404040, 1.2); // Increased from 0.6 to 1.2
         scene.add(ambientLight);
 
-        // Main directional light (sun)
-        const directionalLight = new THREE.DirectionalLight(0xffeaa7, 1.2); // Warm sunlight
+        // Main directional light (sun) - increased intensity
+        const directionalLight = new THREE.DirectionalLight(0xffeaa7, 2.0); // Increased from 1.2 to 2.0
         directionalLight.position.set(10, 15, 5);
         directionalLight.castShadow = true;
         directionalLight.shadow.mapSize.width = 2048;
@@ -301,13 +301,24 @@
         directionalLight.shadow.camera.bottom = -20;
         scene.add(directionalLight);
 
-        // Add fill light for softer shadows
-        const fillLight = new THREE.DirectionalLight(0x74b9ff, 0.3); // Cool fill light
+        // Add fill light for softer shadows - increased intensity
+        const fillLight = new THREE.DirectionalLight(0x74b9ff, 0.8); // Increased from 0.3 to 0.8
         fillLight.position.set(-5, 8, -5);
         scene.add(fillLight);
 
-        // Add atmospheric fog for depth
-        scene.fog = new THREE.Fog(0x87CEEB, 50, 150);
+        // Add additional rim light to brighten the creature from behind
+        const rimLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        rimLight.position.set(-10, 5, -10);
+        scene.add(rimLight);
+
+        // Add a point light that follows the creature for better illumination
+        const creatureLight = new THREE.PointLight(0xffffff, 0.8, 20);
+        creatureLight.position.set(0, 3, 0); // Position above where creature will be
+        scene.add(creatureLight);
+
+        // Add hemisphere light for natural outdoor lighting
+        const hemisphereLight = new THREE.HemisphereLight(0x87CEEB, 0x4a7c3c, 0.4);
+        scene.add(hemisphereLight);
 
         // Add a simple ground plane to help visualize
         function createBeautifulGround() {
@@ -1157,6 +1168,34 @@
             model = gltf.scene; // Store the model reference
             scene.add(model);
 
+            // Brighten the model materials
+            model.traverse((child) => {
+                if (child.isMesh) {
+                    // Enable shadow casting/receiving
+                    child.castShadow = true;
+                    child.receiveShadow = true;
+                    
+                    // Brighten the materials
+                    if (child.material) {
+                        // If it's an array of materials
+                        if (Array.isArray(child.material)) {
+                            child.material.forEach(mat => {
+                                if (mat.color) {
+                                    mat.color.multiplyScalar(1.5); // Brighten by 50%
+                                }
+                                mat.needsUpdate = true;
+                            });
+                        } else {
+                            // Single material
+                            if (child.material.color) {
+                                child.material.color.multiplyScalar(1.5); // Brighten by 50%
+                            }
+                            child.material.needsUpdate = true;
+                        }
+                    }
+                }
+            });
+
             // Debug: Log model info
             console.log('Model loaded:', model);
             console.log('Animations found:', gltf.animations.length);
@@ -1165,13 +1204,15 @@
             const box = new THREE.Box3().setFromObject(model);
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
-            
+
             console.log('Model size:', size);
             console.log('Model center:', center);
 
-            // Center the model
-            model.position.sub(center);
-            model.position.y = 0; // Place on ground
+            // Center the model horizontally but place it properly on the ground
+            model.position.x -= center.x;
+            model.position.z -= center.z;
+            // Set Y position so the bottom of the model touches the ground
+            model.position.y = -box.min.y - 0.5;
 
             // Calculate camera distance based on model size
             const maxDimension = Math.max(size.x, size.y, size.z);
@@ -1348,6 +1389,13 @@
                 
                 // Move towards target
                 model.position.add(direction.multiplyScalar(moveSpeed));
+                
+                // Move the creature light with the model
+                creatureLight.position.set(
+                    model.position.x,
+                    model.position.y + 3,
+                    model.position.z
+                );
                 
                 // Rotate to face movement direction
                 const targetRotation = Math.atan2(direction.x, direction.z);
@@ -1559,8 +1607,6 @@
             
             moveToBowl();
         }
-
-        // Fix the eating function to properly face the bowl and handle food disappearing
         function startEatingAtBowl() {
             isMoving = false;
             
