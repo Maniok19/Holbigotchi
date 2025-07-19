@@ -580,8 +580,8 @@
 
             animateFloatingFood(foodGroup) {
                 const animate = () => {
-                    foodGroup.children.forEach((food, index) => {
-                        food.position.y += Math.sin(Date.now() * 0.001 * food.userData.floatSpeed + index) * 0.01;
+                    foodGroup.children.forEach((food) => {
+                        food.position.y += Math.sin(Date.now() * 0.001 * food.userData.floatSpeed) * 0.01;
                         food.rotation.x += 0.01;
                         food.rotation.y += 0.005;
                         food.position.y -= food.userData.fallSpeed;
@@ -1042,7 +1042,8 @@ resetHunger() {
 
             // Movement and animation
             updateAnimationState() {
-                if (this.isFeedingActive || this.isManualAnimationActive) return;
+                // Ne rien faire si une animation manuelle est active
+                if (this.isFeedingActive || this.isManualAnimationActive || this.isDead) return;
                 
                 const currentTime = Date.now();
                 
@@ -1071,7 +1072,8 @@ resetHunger() {
             }
 
             startRandomMovement() {
-                if (!this.model) return;
+                // Ne pas bouger si une animation manuelle est active
+                if (!this.model || this.isManualAnimationActive) return;
                 
                 const angle = Math.random() * Math.PI * 2;
                 const distance = Math.random() * this.moveRadius;
@@ -1096,7 +1098,8 @@ resetHunger() {
             }
 
             updateMovement() {
-                if (!this.model || !this.isMoving) return;
+                // Ne pas bouger si une animation manuelle est active
+                if (!this.model || !this.isMoving || this.isManualAnimationActive) return;
                 
                 const direction = new THREE.Vector3();
                 direction.subVectors(this.moveTarget, this.model.position);
@@ -1164,7 +1167,8 @@ resetHunger() {
             }
 
             updateModelRotation() {
-                if (this.model && this.shouldFaceScreen && !this.isMoving) {
+                // Ne pas tourner si une animation manuelle est active
+                if (this.model && this.shouldFaceScreen && !this.isMoving && !this.isManualAnimationActive) {
                     const currentRotation = this.model.rotation.y;
                     const rotationDiff = -currentRotation;
                     const rotSpeed = 0.02;
@@ -1178,54 +1182,70 @@ resetHunger() {
             }
 
             playAnimationAuto(animationName) {
+                // Ne pas jouer d'animation automatique si une manuelle est active
+                if (this.isManualAnimationActive) return;
+                
                 if (this.currentAction && this.actions[animationName]) {
                     this.currentAction.fadeOut(0.2);
                 }
                 
                 this.currentAction = this.actions[animationName];
                 if (this.currentAction) {
-                    this.currentAction.reset().fadeIn(0.2).play();
+                    this.currentAction.reset();
+                    this.currentAction.setLoop(THREE.LoopRepeat);
+                    this.currentAction.fadeIn(0.2).play();
                 }
             }
 
         playAnimation(animationName, listItem) {
-            this.isManualAnimationActive = true;
-            
-            if (this.isMoving) {
-                this.stopMovement();
-            }
-            
+    // Arrêter complètement le système automatique
+    this.isManualAnimationActive = true;
+    this.isMoving = false;
+    this.shouldFaceScreen = false;
+    
+    // Arrêter toute animation en cours
+    if (this.currentAction) {
+        this.currentAction.stop();
+    }
+    
+    // Jouer la nouvelle animation en boucle
+    this.currentAction = this.actions[animationName];
+    if (this.currentAction) {
+        this.currentAction.reset();
+        this.currentAction.setLoop(THREE.LoopRepeat); // Boucle infinie
+        this.currentAction.play();
+        
+        // Mettre à jour l'interface
+        document.querySelectorAll('#animationList li').forEach(li => li.classList.remove('active'));
+        listItem.classList.add('active');
+        
+        // Programmer l'arrêt après 5 secondes
+        setTimeout(() => {
+            // Arrêter l'animation manuelle
             if (this.currentAction) {
-                this.currentAction.fadeOut(0.3);
+                this.currentAction.stop();
             }
             
-            this.currentAction = this.actions[animationName];
-            if (this.currentAction) {
-                this.currentAction.reset().fadeIn(0.3).play();
-                
-                document.querySelectorAll('#animationList li').forEach(li => li.classList.remove('active'));
-                listItem.classList.add('active');
-                
-                // Get the animation duration and add extra time for fade transitions
-                const animationDuration = this.currentAction.getClip().duration;
-                const totalTime = (animationDuration + 0.6) * 1000; // Add 0.6s for fade in/out
-                
-                // Disable the loop mode to ensure animation plays only once
-                this.currentAction.setLoop(THREE.LoopOnce);
-                this.currentAction.clampWhenFinished = true;
-                
-                // Set a timeout to re-enable automatic behavior after animation completes
-                setTimeout(() => {
-                    this.isManualAnimationActive = false;
-                    // Reset to idle animation
-                    if (this.actions['Idle_A']) {
-                        this.playAnimationAuto('Idle_A');
-                    }
-                    // Clear the active state from UI
-                    listItem.classList.remove('active');
-                }, totalTime);
+            // Réactiver le système automatique
+            this.isManualAnimationActive = false;
+            
+            // Reprendre l'animation idle
+            if (this.actions['Idle_A']) {
+                this.currentAction = this.actions['Idle_A'];
+                this.currentAction.reset();
+                this.currentAction.setLoop(THREE.LoopRepeat);
+                this.currentAction.play();
             }
-        }
+            
+            // Nettoyer l'interface
+            listItem.classList.remove('active');
+            
+            // Programmer le prochain mouvement
+            this.nextMoveTime = Date.now() + 3000; // Reprendre les mouvements dans 3 secondes
+            this.idleStartTime = Date.now();
+        }, 5000); // 5 secondes exactement
+    }
+}
 
             makeEatAtBowl() {
                 if (!this.model || this.isDead || !this.dogBowl) return;
@@ -1363,7 +1383,6 @@ resetHunger() {
                 });
             }
 
-// ...existing code...
             loadAnimalModel(animal) {
                 if (this.model) {
                     this.scene.remove(this.model);
@@ -1419,38 +1438,37 @@ resetHunger() {
                     console.log('Attempted to load:', modelPath);
                 });
             }
-// ...existing code...
 
-            onMouseClick(event) {
-                this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-                this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-                
-                this.raycaster.setFromCamera(this.mouse, this.camera);
-                
-                // Check bowl click
-                const bowlIntersects = this.raycaster.intersectObject(this.dogBowl, true);
-                if (bowlIntersects.length > 0 && !this.isQuestionActive) {
-                    this.showFeedingQuestion();
-                    return;
-                }
-                
-                // Ground click for movement
-                const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.5);
-                const intersectionPoint = new THREE.Vector3();
-                
-                if (this.raycaster.ray.intersectPlane(groundPlane, intersectionPoint)) {
-                    const clickDistance = Math.sqrt(intersectionPoint.x * intersectionPoint.x + intersectionPoint.z * intersectionPoint.z);
-                    
-                    if (clickDistance <= this.moveRadius) {
-                        this.startMovementToPosition(intersectionPoint);
-                    } else {
-                        const direction = new THREE.Vector3(intersectionPoint.x, 0, intersectionPoint.z).normalize();
-                        const limitedTarget = direction.multiplyScalar(this.moveRadius);
-                        limitedTarget.y = 0;
-                        this.startMovementToPosition(limitedTarget);
-                    }
-                }
-            }
+onMouseClick(event) {
+    this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+    this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+    
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    
+    // Check bowl click
+    const bowlIntersects = this.raycaster.intersectObject(this.dogBowl, true);
+    if (bowlIntersects.length > 0 && !this.isQuestionActive) {
+        this.showFeedingQuestion();
+        return;
+    }
+    
+    // Ground click for movement
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0.5);
+    const intersectionPoint = new THREE.Vector3();
+    
+    if (this.raycaster.ray.intersectPlane(groundPlane, intersectionPoint)) {
+        const clickDistance = Math.sqrt(intersectionPoint.x * intersectionPoint.x + intersectionPoint.z * intersectionPoint.z);
+        
+        if (clickDistance <= this.moveRadius) {
+            this.startMovementToPosition(intersectionPoint);
+        } else {
+            const direction = new THREE.Vector3(intersectionPoint.x, 0, intersectionPoint.z).normalize();
+            const limitedTarget = direction.multiplyScalar(this.moveRadius);
+            limitedTarget.y = 0;
+            this.startMovementToPosition(limitedTarget);
+        }
+    }
+}
 
             // Main animation loop
             animate() {
