@@ -907,39 +907,48 @@
         }
 
         // Update the checkAnswer function to make the muskrat go to the bowl when fed correctly
-        function checkAnswer(selectedIndex) {
-            const feedbackElement = document.getElementById('feedbackMessage');
-            const closeButton = document.getElementById('closeModal');
-            
-            if (selectedIndex === currentQuestion.correct) {
-                feedbackElement.innerHTML = '<span class="correct">Correct! Your muskrat is going to eat!</span>';
-                
-                // Reset hunger when successfully fed
-                resetHunger();
-                
-                // Make the muskrat go to the bowl to eat
-                setTimeout(() => {
-                    makeEatAtBowl();
-                }, 1000); // Wait 1 second before muskrat starts moving
+        // Update the checkAnswer function to make the modal close automatically after correct answers
+function checkAnswer(selectedIndex) {
+    const feedbackElement = document.getElementById('feedbackMessage');
+    const closeButton = document.getElementById('closeModal');
+    
+    if (selectedIndex === currentQuestion.correct) {
+        feedbackElement.innerHTML = '<span class="correct">Correct! Your muskrat is going to eat!</span>';
+        
+        // Reset hunger when successfully fed
+        resetHunger();
+        
+        // Make the muskrat go to the bowl to eat
+        setTimeout(() => {
+            makeEatAtBowl();
+        }, 1000); // Wait 1 second before muskrat starts moving
 
-                // Trigger food fall effect
-                createFoodFallEffect();
-            } else {
-                feedbackElement.innerHTML = '<span class="incorrect">Wrong answer. Your muskrat is still hungry!</span>';
-            }
-            
-            // Disable answer buttons
-            const buttons = document.querySelectorAll('.answer-button');
-            buttons.forEach(button => button.disabled = true);
-            
-            // Show close button
-            closeButton.style.display = 'inline-block';
-            closeButton.onclick = () => {
-                document.getElementById('questionModal').style.display = 'none';
-                isQuestionActive = false;
-                isFeedingActive = false;
-            };
-        }
+        // Trigger food fall effect
+        createFoodFallEffect();
+        
+        // Auto-close modal after 3 seconds for correct answers (no close button needed)
+        setTimeout(() => {
+            document.getElementById('questionModal').style.display = 'none';
+            isQuestionActive = false;
+            isFeedingActive = false;
+        }, 3000);
+        
+    } else {
+        feedbackElement.innerHTML = '<span class="incorrect">Wrong answer. Your muskrat is still hungry!</span>';
+        
+        // Show close button only for wrong answers
+        closeButton.style.display = 'inline-block';
+        closeButton.onclick = () => {
+            document.getElementById('questionModal').style.display = 'none';
+            isQuestionActive = false;
+            isFeedingActive = false;
+        };
+    }
+    
+    // Disable answer buttons
+    const buttons = document.querySelectorAll('.answer-button');
+    buttons.forEach(button => button.disabled = true);
+}
 
         // Hunger system functions
         function createHungerBar() {
