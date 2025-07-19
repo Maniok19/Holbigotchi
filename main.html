@@ -900,136 +900,16 @@
             document.getElementById('questionModal').style.display = 'flex';
         }
 
-<<<<<<< HEAD
-        // Add these variables after the other variable declarations (around line 115)
-        let foodParticles = [];
-        let isDroppingFood = false;
-
-        // Add this function to create and animate falling food particles
-        function createFallingFood() {
-            if (isDroppingFood || !dogBowl) return;
-            
-            isDroppingFood = true;
-            
-            // Create multiple food particles
-            const particleCount = 15;
-            foodParticles = [];
-            
-            for (let i = 0; i < particleCount; i++) {
-                // Create food particle (small sphere)
-                const foodGeometry = new THREE.SphereGeometry(0.05, 8, 6);
-                const foodMaterial = new THREE.MeshLambertMaterial({ 
-                    color: new THREE.Color().setHSL(0.1 + Math.random() * 0.1, 0.8, 0.5) // Brown variations
-                });
-                const foodParticle = new THREE.Mesh(foodGeometry, foodMaterial);
-                
-                // Start position above the bowl
-                foodParticle.position.set(
-                    dogBowl.position.x + (Math.random() - 0.5) * 0.5, // Random X around bowl
-                    dogBowl.position.y + 3 + Math.random() * 0.5,      // Start high above bowl
-                    dogBowl.position.z + (Math.random() - 0.5) * 0.5   // Random Z around bowl
-                );
-                
-                // Add physics properties
-                foodParticle.userData = {
-                    velocity: new THREE.Vector3(
-                        (Math.random() - 0.5) * 0.02, // Small random horizontal velocity
-                        0,                              // No initial Y velocity (will fall)
-                        (Math.random() - 0.5) * 0.02   // Small random horizontal velocity
-                    ),
-                    gravity: -0.001,                    // Gravity acceleration
-                    bounced: false,                     // Track if particle has bounced
-                    life: 1.0                          // Life span for fade out
-                };
-                
-                foodParticle.castShadow = true;
-                scene.add(foodParticle);
-                foodParticles.push(foodParticle);
-            }
-            
-            console.log('Started dropping food particles:', particleCount);
-        }
-
-        // Add this function to update falling food animation
-        function updateFallingFood() {
-            if (foodParticles.length === 0) {
-                isDroppingFood = false;
-                return;
-            }
-            
-            const particlesToRemove = [];
-            
-            foodParticles.forEach((particle, index) => {
-                const userData = particle.userData;
-                
-                // Apply gravity
-                userData.velocity.y += userData.gravity;
-                
-                // Update position
-                particle.position.add(userData.velocity);
-                
-                // Check if particle hit the ground/bowl level
-                const bowlY = dogBowl.position.y + 0.1; // Slightly above bowl bottom
-                if (particle.position.y <= bowlY && !userData.bounced) {
-                    // Bounce once
-                    userData.velocity.y = Math.abs(userData.velocity.y) * 0.3; // Reduce bounce
-                    userData.velocity.x *= 0.7; // Reduce horizontal velocity
-                    userData.velocity.z *= 0.7;
-                    userData.bounced = true;
-                    particle.position.y = bowlY; // Snap to bowl level
-                }
-                
-                // If particle has bounced and is settling
-                if (userData.bounced && Math.abs(userData.velocity.y) < 0.001) {
-                    userData.velocity.multiplyScalar(0.9); // Slow down
-                    
-                    // Start fading out after settling
-                    userData.life -= 0.01;
-                    if (userData.life <= 0) {
-                        particlesToRemove.push(index);
-                    } else {
-                        // Fade out the particle
-                        particle.material.opacity = userData.life;
-                        particle.material.transparent = true;
-                    }
-                }
-                
-                // Remove particles that fall too far or live too long
-                if (particle.position.y < -2 || userData.life <= 0) {
-                    particlesToRemove.push(index);
-                }
-            });
-            
-            // Remove finished particles
-            particlesToRemove.reverse().forEach(index => {
-                const particle = foodParticles[index];
-                scene.remove(particle);
-                particle.geometry.dispose();
-                particle.material.dispose();
-                foodParticles.splice(index, 1);
-            });
-        }
-
-        // Update the checkAnswer function to include food dropping
-=======
         // Update the checkAnswer function to reset hunger on correct answer
->>>>>>> 75032af (adding the health  bar and adding more food to the bowl)
         function checkAnswer(selectedIndex) {
             const feedbackElement = document.getElementById('feedbackMessage');
             const closeButton = document.getElementById('closeModal');
             
             if (selectedIndex === currentQuestion.correct) {
-<<<<<<< HEAD
-                feedbackElement.innerHTML = '<span class="correct">Correct! Your muskrat is happy!</span>';
-                
-                // Drop food into the bowl
-                createFallingFood();
-=======
                 feedbackElement.innerHTML = '<span class="correct">Correct! Your muskrat is well fed and happy!</span>';
                 
                 // Reset hunger when successfully fed
                 resetHunger();
->>>>>>> 75032af (adding the health  bar and adding more food to the bowl)
                 
                 // Play eating animation if available
                 if (actions['Eat'] || actions['Eating']) {
@@ -1632,9 +1512,6 @@
             
             // Update model rotation for screen facing
             updateModelRotation();
-            
-            // Update falling food animation
-            updateFallingFood();
             
             renderer.render(scene, camera);
         }
